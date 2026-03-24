@@ -1,0 +1,261 @@
+import base64
+import cv2
+import numpy as np
+import sounddevice as sd
+import soundfile as sf
+from flask import Flask, render_template_string, Response
+from flask_socketio import SocketIO
+import threading, time, io
+
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# -----------------------------
+# ROBOT STATE
+# -----------------------------
+state = {
+    "mode": "Idle",
+    "movement": "Stop",
+    "speed": 0,
+    "emotion": "Neutral",
+    "head": {"rotate": 0, "tilt": 0},
+    "arms": {"left": {"h":0,"v":0}, "right": {"h":0,"v":0}}
+}
+
+video_frame = None
+audio_queue = []
+temp_audio_chunks = []
+
+# -----------------------------
+# KAMERA THREAD
+# -----------------------------
+def camera_thread():
+    global video_frame
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        print("❌ Kamera konnte nicht geöffnet werden!")
+        return
+    print("✅ Kamera gestartet")
+    while True:
+        ret, frame = cap.read()
+        if ret:
+            _, buffer = cv2.imencode('.jpg', frame)
+            video_frame = base64.b64encode(buffer).decode('utf-8')
+        time.sleep(0.03)
+
+threading.Thread(target=camera_thread, daemon=True).start()
+
+# -----------------------------
+# AUDIO PLAYBACK THREAD
+# -----------------------------
+def play_audio_thread():
+    while True:
+        if audio_queue:
+            audio_data, samplerate = audio_queue.pop(0)
+            sd.play(audio_data, samplerate=samplerate)
+            sd.wait()
+        else:
+            time.sleep(0.05)
+
+threading.Thread(target=play_audio_thread, daemon=True).start()
+
+# -----------------------------
+# VIDEO GENERATOR
+# -----------------------------
+def generate_frames():
+    global video_frame
+    while True:
+        if video_frame:
+            frame = base64.b64decode(video_frame)
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        time.sleep(0.03)
+
+# -----------------------------
+# WEBPAGE
+# -----------------------------
+HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<title>ESP32P4 Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+<h1>ESP32P4 Robot Simulator</h1>
+
+<img src="/video_feed" width="400"/>
+
+<h3>Movement</h3>
+<button onclick="send('forward')">Forward</button>
+<button onclick="send('backward')">Backward</button>
+<button onclick="send('left')">Left</button>
+<button onclick="send('right')">Right</button>
+<button onclick="send('stop')">Stop</button>
+
+<h3>Speed</h3>
+<input type="range" min="0" max="100" onchange="setSpeed(this.value)">
+
+<h3>Head</h3>
+Rotate: <input type="range" min="-90" max="90" onchange="setHead('rotate', this.value)">
+Tilt: <input type="range" min="-90" max="90" onchange="setHead('tilt', this.value)">
+
+<h3>Arms</h3>
+Left H: <input type="range" min="-90" max="90" onchange="setArm('left','h',this.value)">
+Left V: <input type="range" min="-90" max="90" onchange="setArm('left','v',this.value)">
+<br>
+Right H: <input type="range" min="-90" max="90" onchange="setArm('right','h',this.value)">
+Right V: <input type="range" min="-90" max="90" onchange="setArm('right','v',this.value)">
+
+<h3>Modes</h3>
+<button onclick="setMode('Play')">Play</button>
+<button onclick="setMode('Assist')">Assist</button>
+<button onclick="setMode('Explore')">Explore</button>
+<button onclick="setMode('Auto')">Auto</button>
+<button onclick="setMode('Idle')">Idle</button>
+
+<h3>Emotion</h3>
+<div id="emotion">Neutral</div>
+
+<h3>Command Input</h3>
+<input id="cmd" type="text">
+<button onclick="sendCmd()">Send</button>
+
+<h3>Status</h3>
+<table border="1">
+<tr><th>Parameter</th><th>Wert</th></tr>
+<tr><td>Bewegung</td><td id="status_movement">Stop</td></tr>
+<tr><td>Geschwindigkeit</td><td id="status_speed">0</td></tr>
+<tr><td>Kopf Rotate</td><td id="status_head_rotate">0</td></tr>
+<tr><td>Kopf Tilt</td><td id="status_head_tilt">0</td></tr>
+<tr><td>Arme L H</td><td id="status_arm_left_h">0</td></tr>
+<tr><td>Arme L V</td><td id="status_arm_left_v">0</td></tr>
+<tr><td>Arme R H</td><td id="status_arm_right_h">0</td></tr>
+<tr><td>Arme R V</td><td id="status_arm_right_v">0</td></tr>
+<tr><td>Modus</td><td id="status_mode">Idle</td></tr>
+<tr><td>Emotion</td><td id="status_emotion">Neutral</td></tr>
+<tr><td>Audio</td><td id="audio_status">❌</td></tr>
+</table>
+
+<script>
+var socket = io();
+let audioTimeout;
+
+function send(dir){ socket.emit('move', dir); }
+function setSpeed(val){ socket.emit('speed', val); }
+function setHead(type,val){ socket.emit('head',{type:type,val:val}); }
+function setArm(side,axis,val){ socket.emit('arm',{side:side,axis:axis,val:val}); }
+function setMode(mode){ socket.emit('mode', mode); }
+function sendCmd(){
+    let cmd = document.getElementById('cmd').value;
+    socket.emit('cmd', cmd);
+}
+
+socket.on('state', function(data){
+    document.getElementById('status_movement').innerText = data.movement;
+    document.getElementById('status_speed').innerText = data.speed;
+    document.getElementById('status_head_rotate').innerText = data.head.rotate;
+    document.getElementById('status_head_tilt').innerText = data.head.tilt;
+    document.getElementById('status_arm_left_h').innerText = data.arms.left.h;
+    document.getElementById('status_arm_left_v').innerText = data.arms.left.v;
+    document.getElementById('status_arm_right_h').innerText = data.arms.right.h;
+    document.getElementById('status_arm_right_v').innerText = data.arms.right.v;
+    document.getElementById('status_mode').innerText = data.mode;
+    document.getElementById('status_emotion').innerText = data.emotion;
+});
+
+socket.on('audio_stream', function(data){
+    if(data === 'start'){
+        document.getElementById('audio_status').innerText = "🔊";
+        if(audioTimeout) clearTimeout(audioTimeout);
+        audioTimeout = setTimeout(()=>{ document.getElementById('audio_status').innerText = "❌"; }, 500);
+    }
+});
+
+socket.on('play_audio', function(data){
+    var audio = document.createElement('audio');
+    audio.src = 'data:audio/wav;base64,' + data;
+    audio.autoplay = true;
+    document.body.appendChild(audio);
+});
+</script>
+
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(HTML)
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# -----------------------------
+# SOCKET EVENTS
+# -----------------------------
+@socketio.on('move')
+def move(direction): state['movement'] = direction
+@socketio.on('speed')
+def speed(val): state['speed'] = int(val)
+@socketio.on('head')
+def head(data): state['head'][data['type']] = int(data['val'])
+@socketio.on('arm')
+def arm(data): state['arms'][data['side']][data['axis']] = int(data['val'])
+@socketio.on('mode')
+def mode(m): state['mode'] = m
+
+@socketio.on('cmd')
+def cmd(c):
+    if "happy" in c: state['emotion']="Freudig"
+    elif "sad" in c: state['emotion']="Traurig"
+    elif "curious" in c: state['emotion']="Neugierig"
+    elif "relaxed" in c: state['emotion']="Entspannt"
+
+# -----------------------------
+# AUDIO CHUNKS HANDLING
+# -----------------------------
+@socketio.on('play_audio_start')
+def play_audio_start():
+    global temp_audio_chunks
+    temp_audio_chunks = []
+    print("📥 Audio-Datei startet Empfang...")
+
+@socketio.on('play_audio_chunk')
+def play_audio_chunk(data):
+    global temp_audio_chunks
+    chunk_bytes = base64.b64decode(data['chunk'])
+    temp_audio_chunks.append(chunk_bytes)
+    print(f"🔊 Chunk empfangen, Größe: {len(chunk_bytes)} Bytes")
+
+@socketio.on('play_audio_end')
+def play_audio_end():
+    global temp_audio_chunks
+    full_audio = b''.join(temp_audio_chunks)
+    file_like = io.BytesIO(full_audio)
+    audio_data, samplerate = sf.read(file_like, dtype='int16')
+    if len(audio_data.shape) > 1:
+        audio_data = audio_data.mean(axis=1).astype(np.int16)
+    audio_queue.append((audio_data, samplerate))
+    print(f"🎵 Audio in Queue, {len(audio_data)} Samples, {samplerate} Hz")
+    socketio.emit('audio_stream','start')
+    temp_audio_chunks = []
+
+# -----------------------------
+# BROADCAST LOOP
+# -----------------------------
+def broadcast():
+    while True:
+        if video_frame: socketio.emit('video', video_frame)
+        socketio.emit('state', state)
+        socketio.sleep(0.05)
+
+socketio.start_background_task(broadcast)
+
+# -----------------------------
+# MAIN
+# -----------------------------
+if __name__ == "__main__":
+    print("🚀 Simulator läuft auf http://localhost:5000")
+    socketio.run(app, host='0.0.0.0', port=5000)
