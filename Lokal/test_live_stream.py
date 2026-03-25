@@ -40,7 +40,7 @@ def test_live_stream():
 def main():
     """Run the live stream test"""
     print("╔════════════════════════════════════════════════════════════════╗")
-    print("║         Live ESP32P4 Stream Test                           ║")
+    print("║         Live ESP32P4 Stream Test                               ║")
     print("╚════════════════════════════════════════════════════════════════╝")
     print()
 
