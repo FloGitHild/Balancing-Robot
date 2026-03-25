@@ -20,3 +20,6 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+yolov8l.pt
+yolov8n.pt
+yolov8x.pt
