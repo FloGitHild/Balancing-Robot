@@ -1,0 +1,408 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║         ADVANCED VISION ANALYZER FOR ESP32P4 - SETUP GUIDE                 ║
+║           Multi-Modal Detection: Objects, Faces, Scene Analysis            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✨ WHAT'S NEW (Advanced Version)
+═══════════════════════════════════════════════════════════════════════════
+
+Previous Version:
+  • Basic object detection
+
+NEW Advanced Version:
+  ✅ Objects: chairs, trees, plants, animals, persons, vehicles
+  ✅ Faces: face detection + 6 key landmarks
+  ✅ Landmarks: 468-point facial mesh
+  ✅ Colors: dominant color, brightness, saturation analysis
+  ✅ Edges: complexity detection and edge density
+  ✅ Grouped: all data organized by frame
+  ✅ Low FPS: 1-10 FPS, very efficient processing
+  ✅ Continuous: runs 24/7 on robot
+
+
+🚀 QUICK START (3 STEPS)
+═══════════════════════════════════════════════════════════════════════════
+
+1. Install (first time only):
+   pip install -r Lokal\requirements_vision.txt
+
+2. Run:
+   python "Lokal\Vision Detection.py"
+
+3. Watch terminal for continuous analysis output
+
+
+📦 INSTALLATION
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 1: Install Dependencies
+┌─────────────────────────────────────────────────────────────────────────┐
+│ From d:\Florian\Freizeit\Balancing_Robot, run:                         │
+│                                                                         │
+│ pip install -r Lokal\requirements_vision.txt                           │
+│                                                                         │
+│ This installs:                                                          │
+│ • ultralytics (YOLOv8)                                                 │
+│ • mediapipe (Face detection & landmarks)                              │
+│ • opencv-python (Image processing)                                    │
+│ • torch & torchvision (Neural networks)                               │
+│ • numpy & requests                                                     │
+│                                                                         │
+│ Time: ~3-5 minutes on first run                                        │
+│ Downloaded: ~2 GB (neural network models)                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+STEP 2: Verify Installation
+┌─────────────────────────────────────────────────────────────────────────┐
+│ python -c "import mediapipe; import ultralytics; print('Ready!')"      │
+│                                                                         │
+│ Should output: Ready!                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+STEP 3: Run
+┌─────────────────────────────────────────────────────────────────────────┐
+│ python "Lokal\Vision Detection.py"                                     │
+│                                                                         │
+│ Or use the launcher:                                                    │
+│ (If you have the old launcher - it will still work!)                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+🎯 RUNNING THE PROGRAM
+═══════════════════════════════════════════════════════════════════════════
+
+BASIC RUN (with virtual environment):
+
+  cd d:\Florian\Freizeit\Balancing_Robot
+  .\.venv\Scripts\Activate.ps1
+  python "Lokal\Vision Detection.py"
+
+WITHOUT Virtual Environment:
+
+  python "d:\Florian\Freizeit\Balancing_Robot\Lokal\Vision Detection.py"
+
+
+⚙️ CONFIGURATION (Edit Vision Detection.py)
+═══════════════════════════════════════════════════════════════════════════
+
+Line ~14: STREAM_URL
+  Default: 'http://localhost:5000/video_feed'
+  
+  Change to:
+  • 'http://localhost:8000/video'          (alternative port)
+  • 'test_video.mp4'                       (local video file)
+  • 0                                      (webcam)
+  • 'rtsp://camera_ip/stream'              (IP camera)
+
+Line ~15: MODEL_SIZE
+  Default: 'n' (nano - recommended)
+  
+  Options:
+  • 'n' = lightweight, fast        ← RECOMMENDED for analysis
+  • 's' = small, balanced
+  • 'm' = medium, accurate
+  • 'l' = large, very accurate (slow)
+
+Line ~16: CONFIDENCE_THRESHOLD
+  Default: 0.5 (50% confidence minimum)
+  
+  Range: 0.0 - 1.0
+  • 0.3 = more detections (sometimes false positives)
+  • 0.5 = balanced
+  • 0.7 = fewer detections (only very confident)
+
+Line ~17: TARGET_FPS
+  Default: 5 (5 analysis frames per second)
+  
+  Options:
+  • 1 = every 30 frames analyzed (low CPU)
+  • 5 = every 6 frames (default)
+  • 10 = every 3 frames (faster, higher CPU)
+
+Line ~18: MAX_HISTORY
+  Default: 20 (keep last 20 detections)
+  • Reduces memory usage if set lower
+  • Higher = more detailed history
+
+
+📊 TERMINAL OUTPUT STRUCTURE
+═══════════════════════════════════════════════════════════════════════════
+
+Every analysis produces:
+
+[HH:MM:SS.mmm] 🔍 COMPREHENSIVE IMAGE ANALYSIS
+════════════════════════════════
+📊 SCENE ANALYSIS:
+  • Dominant Color: [COLOR NAME]
+  • Brightness: [0-255]
+  • Saturation: [0-255]
+  • Complexity: [Low/Medium/High]
+
+📦 OBJECTS DETECTED (N):
+  • [CLASS]
+    └─ Confidence: [%] | Position: (X, Y) | Size: WxH px
+
+👤 FACES DETECTED (N):
+  Face #N:
+    • Confidence: [%]
+    • Position: (X, Y)
+    • Size: WxH px
+    • Keypoints: 6
+    • Key locations:
+      - right_eye: (X, Y)
+      - left_eye: (X, Y)
+      - nose: (X, Y)
+      - mouth: (X, Y)
+      - right_ear: (X, Y)
+      - left_ear: (X, Y)
+
+🧬 FACIAL LANDMARKS (N faces):
+  Face #N: M landmark points
+
+
+🎮 INTERACTIVE KEYS
+═══════════════════════════════════════════════════════════════════════════
+
+While running (if display window is open):
+
+Q  - Quit program
+S  - Save current analysis frame as JPEG
+D  - Toggle display (terminal-only mode)
+
+
+🔍 DETECTED OBJECT CLASSES
+═══════════════════════════════════════════════════════════════════════════
+
+PEOPLE & ANIMALS:
+  person, dog, cat, bird, horse, sheep, cow, elephant, zebra, giraffe
+
+FURNITURE & HOUSEHOLD:
+  chair, couch, table, bed, dining table, potted plant, bench, desk
+
+VEHICLES:
+  car, motorcycle, truck, bus, bicycle, train, airplane, boat
+
+FOOD & COMMON OBJECTS:
+  banana, apple, bottle, cup, plate, bowl, fork, spoon, knife
+
+PLUS: 50+ more COCO dataset classes
+
+SPECIAL DETECTION:
+  face  - Detected separately via MediaPipe
+  tree  - Detected as general object (implied in natural scenes)
+
+
+🧠 DETECTION ENGINES EXPLAINED
+═══════════════════════════════════════════════════════════════════════════
+
+ENGINE 1: YOLOv8 (Objects)
+  ├─ Model: Lightweight nano version
+  ├─ Detects: 80 COCO dataset classes
+  ├─ Speed: ⚡⚡⚡ Very fast
+  ├─ Accuracy: ★★★ Good for real-time
+  └─ Usage: General object detection
+
+ENGINE 2: MediaPipe Face Detection
+  ├─ Purpose: Detect AND locate faces
+  ├─ Provides: 6 facial keypoints
+  ├─ Speed: ⚡⚡⚡⚡ Extremely fast
+  ├─ Accuracy: ★★★★★ Excellent for faces
+  └─ Usage: Primary face detection
+
+ENGINE 3: MediaPipe Face Mesh
+  ├─ Purpose: Detailed facial landmarks
+  ├─ Provides: 468 landmark points per face
+  ├─ Speed: ⚡⚡⚡⚡ Extremely fast
+  ├─ Accuracy: ★★★★★ Medical-grade
+  └─ Usage: Facial geometry analysis
+
+ENGINE 4: Color Analysis
+  ├─ Purpose: Scene color profile
+  ├─ Extracts: Dominant color, brightness, saturation
+  ├─ Speed: ⚡⚡⚡⚡⚡ Instant
+  └─ Usage: Scene context, mood analysis
+
+ENGINE 5: Edge Detection
+  ├─ Purpose: Scene complexity
+  ├─ Extracts: Edge density, complexity level
+  ├─ Algorithm: Canny edge detector
+  └─ Usage: Scene understanding
+
+
+💻 SYSTEM REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════
+
+MINIMUM:
+  • Windows 7+ or Linux
+  • Python 3.8+
+  • 4 GB RAM
+  • 500 MB free disk space (after models)
+
+RECOMMENDED FOR SMOOTH ~5 FPS:
+  • Windows 10+ or Linux
+  • Python 3.9+
+  • 8 GB RAM
+  • 2 GB free disk space
+  • Dual-core CPU or better
+
+PERFORMANCE:
+  • CPU only: 3-8 FPS (depends on resolution)
+  • With GPU: 15-30+ FPS (NVIDIA CUDA recommended)
+  • Automatic GPU usage if available
+
+
+🔧 TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════
+
+PROBLEM: "ModuleNotFoundError: mediapipe"
+SOLUTION:
+  pip install --upgrade mediapipe
+  # or reinstall all:
+  pip install --upgrade -r Lokal\requirements_vision.txt
+
+PROBLEM: "Failed to connect to stream"
+SOLUTION:
+  1. Check if ESP32P4 simulator is running
+  2. Test stream URL in browser
+  3. Try alternative URLs in code
+  4. Check firewall settings
+
+PROBLEM: "Very low FPS / laggy"
+SOLUTION:
+  1. Use smaller model: MODEL_SIZE = 'n'
+  2. Increase TARGET_FPS (e.g., TARGET_FPS = 1)
+  3. Close other applications
+  4. Check system resources
+
+PROBLEM: "Faces not detected but objects are"
+SOLUTION:
+  1. Ensure good lighting
+  2. Try full-frontal face orientation
+  3. Faces must be ~50 pixels+ in size
+  4. Lower CONFIDENCE_THRESHOLD to 0.3
+
+PROBLEM: "No objects detected at all"
+SOLUTION:
+  1. Lower CONFIDENCE_THRESHOLD (try 0.3-0.4)
+  2. Try MODEL_SIZE = 's' for better accuracy
+  3. Verify video stream is working
+  4. Check image brightness
+
+
+📈 PERFORMANCE OPTIMIZATION
+═══════════════════════════════════════════════════════════════════════════
+
+FOR LOWEST CPU USAGE (24/7 monitoring):
+
+  MODEL_SIZE = 'n'
+  TARGET_FPS = 1
+  CONFIDENCE_THRESHOLD = 0.5
+
+  Expected: 2-3 FPS, minimal CPU load
+
+
+FOR BEST ACCURACY (event detection):
+
+  MODEL_SIZE = 's'
+  TARGET_FPS = 5
+  CONFIDENCE_THRESHOLD = 0.5
+
+  Expected: 5-10 FPS, moderate CPU
+
+
+FOR REAL-TIME RESPONSIVENESS:
+
+  MODEL_SIZE = 'n'
+  TARGET_FPS = 10
+  CONFIDENCE_THRESHOLD = 0.4
+
+  Expected: 10-15 FPS, higher CPU
+
+
+🔬 EXAMPLE: FACE TRACKING
+
+Track a person's face across frames:
+
+  1. Detect faces in current frame
+  2. Compare face positions to last frame
+  3. Calculate movement (dx, dy)
+  4. Log position history
+  5. Alert if face moves suddenly
+
+See: README_Advanced_Vision.md for code examples
+
+
+🤖 INTEGRATION WITH BALANCING ROBOT
+═══════════════════════════════════════════════════════════════════════════
+
+EXAMPLE 1: React to Persons
+
+  # In your robot controller:
+  from Lokal import Vision Detection
+  
+  analyzer = Vision Detection.AdvancedVisionAnalyzer()
+  cap = analyzer.connect_stream()
+  
+  while True:
+    ret, frame = cap.read()
+    if not ret: break
+    
+    detections = analyzer.detect_objects(frame)
+    formatted = analyzer.format_object_detection(detections)
+    
+    for obj in formatted:
+      if obj['class'] == 'person':
+        # React to person!
+        print(f"Person detected at {obj['center_x']}, {obj['center_y']}")
+
+
+EXAMPLE 2: Obstacle Avoidance
+
+  for obj in detections:
+    if obj['class'] in ['chair', 'plant', 'tree', 'table']:
+      # Obstacle detected!
+      obstacle_pos = (obj['center_x'], obj['center_y'])
+      robot.avoid_obstacle(obstacle_pos)
+
+
+EXAMPLE 3: Face-Based Interaction
+
+  for face in faces:
+    if face['confidence'] > 0.9:
+      # High confidence face found
+      face_center = (face['center_x'], face['center_y'])
+      robot.look_at_face(face_center)
+
+
+📚 COMPLETE FILE LIST
+═══════════════════════════════════════════════════════════════════════════
+
+Vision Detection.py         ← Main advanced analyzer (1000+ lines)
+test_stream.py             ← Stream URL auto-discovery
+vision_utils.py            ← Logging/tracking utilities
+requirements_vision.txt    ← Dependencies
+README_Advanced_Vision.md  ← Detailed documentation (this file)
+SETUP_GUIDE_ADVANCED.txt  ← This setup guide
+
+
+✅ NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════
+
+1. Install dependencies:
+   pip install -r Lokal\requirements_vision.txt
+
+2. Run the analyzer:
+   python "Lokal\Vision Detection.py"
+
+3. Watch terminal for analysis output
+
+4. Customize configuration (optional):
+   Edit Vision Detection.py for your needs
+
+5. Integrate with your robot code
+
+
+═══════════════════════════════════════════════════════════════════════════
+Advanced Vision Analyzer - Ready! ✅
+Supports: Objects, Faces, Landmarks, Colors, Complexity Analysis
+═══════════════════════════════════════════════════════════════════════════
