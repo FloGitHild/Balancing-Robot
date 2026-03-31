@@ -234,7 +234,27 @@ Audio          : ${data.audio ? "🔊" : "❌"}
 socket.on('state', function(data){
     if(!data.audio) data.audio = false;
     updateStatus(data);
-    document.getElementById('emotion').innerText = data.emotion;
+    
+    // Update emotion with emoji
+    var emotion = data.emotion || "Neutral";
+    var emotionEmojis = {
+        "Neutral": "😐",
+        "Freudig": "😄",
+        "Traurig": "😢",
+        "Neugierig": "🤔",
+        "Entspannt": "😌",
+        "Happy": "😄",
+        "Sad": "😢",
+        "Curious": "🤔",
+        "Relaxed": "😌",
+        "Excited": "🎉",
+        "Thinking": "🤨",
+        "Surprised": "😮",
+        "Scared": "😨",
+        "Angry": "😠"
+    };
+    var emoji = emotionEmojis[emotion] || "😐";
+    document.getElementById('emotion').innerText = emoji + " " + emotion;
 });
 
 socket.on('audio_stream', function(data){
@@ -280,6 +300,16 @@ def mode(m): state['mode'] = m
 # -----------------------------
 @socketio.on('cmd')
 def cmd(c):
+    # Handle mood updates from Agent
+    if c.startswith("__mood__"):
+        mood = c.replace("__mood__", "")
+        state['emotion'] = mood
+        print(f"🎭 Mood updated to: {mood}")
+        return
+    
+    # Relay command to Agent
+    socketio.emit('agent_command', c)
+
     if "happy" in c: state['emotion']="Freudig"
     elif "sad" in c: state['emotion']="Traurig"
     elif "curious" in c: state['emotion']="Neugierig"
@@ -342,7 +372,12 @@ def reset():
 
 @socketio.on('vision_update')
 def vision_update(data):
-    pass
+    # Relay vision data to agent and log
+    socketio.emit('vision_update', data)
+    faces = data.get('faces', [])
+    objs = data.get('objects', [])
+    if faces or objs:
+        print(f"📹 Vision relay: {len(faces)} faces, {len(objs)} objects")
 
 
 # -----------------------------

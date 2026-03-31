@@ -17,6 +17,16 @@ class Vision:
             self.faces = faces
             self.last_update = time.time()
     
+    def update_from_dict(self, data: Dict[str, Any]):
+        """Update from dict received via socket"""
+        objects = data.get("objects", [])
+        faces = data.get("faces", [])
+        self.update(objects, faces)
+    
+    def request_update(self):
+        """Placeholder - actual request sent via agent's socket"""
+        pass
+    
     def get_objects(self) -> str:
         """Get current object list"""
         with self.lock:

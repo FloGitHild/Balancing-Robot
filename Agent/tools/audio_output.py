@@ -46,17 +46,21 @@ class AudioOutput:
             return f"Error playing file: {e}"
     
     def play_tts(self, text: str, voice: str = "default") -> str:
-        """Generate and play TTS (placeholder - integrate with TTS service)"""
-        # This is a placeholder. Integrate with:
-        # - pyttsx3 (offline TTS)
-        # - coqui-tts
-        # - piper-tts
-        # - or use Ollama's built-in TTS if available
-        
-        filename = self._save_tts_request(text, voice)
-        
-        # For now, just save the request
-        return f"TTS request saved: {filename}. (TTS generation not implemented - add TTS service)"
+        """Generate and play TTS"""
+        try:
+            from gtts import gTTS
+            import io
+            
+            tts = gTTS(text=text, lang='en')
+            audio_bytes = io.BytesIO()
+            tts.write_to_fp(audio_bytes)
+            audio_bytes.seek(0)
+            audio_data = audio_bytes.read()
+            
+            self.last_tts_audio = audio_bytes.getvalue()
+            return f"TTS generated: {len(audio_data)} bytes"
+        except Exception as e:
+            return f"TTS error: {e}"
     
     def _save_tts_request(self, text: str, voice: str) -> str:
         """Save TTS request for later generation"""
@@ -127,6 +131,7 @@ class AudioOutput:
         if self.is_playing:
             sd.stop()
             self.is_playing = False
+        return "Playback stopped"
     
     def get_tools(self) -> list:
         return [

@@ -15,12 +15,15 @@ SIM_URL = "http://localhost:5000"
 Face_Recog_Tolerance = 0.6
 Object_Confidence_Threshold = 0.6
 SHOW_WINDOW = False  # Set True to show detection window (slower)
-ANALYSIS_INTERVAL = 1.0  # Seconds between analysis runs
+ANALYSIS_INTERVAL = 0.5  # Run detection every 0.5 seconds
 
 detector = Detector()
 db = FaceDB()
 
 sio = socketio.Client(logger=False, engineio_logger=False)
+
+# Vision will only run when requested
+vision_active = False
 
 cap = cv2.VideoCapture(STREAM_URL)
 if not cap.isOpened():
@@ -28,8 +31,7 @@ if not cap.isOpened():
     exit()
 
 print("✅ Stream läuft!")
-if SHOW_WINDOW:
-    cv2.namedWindow("Detection", cv2.WINDOW_NORMAL)
+# Silent - no print when connected
 
 latest_frame = None
 frame_lock = threading.Lock()
@@ -42,7 +44,14 @@ last_objects = []
 
 @sio.event
 def connect():
-    print("✅ Connected to Robot Simulator")
+    pass  # Silent connection
+
+@sio.on('request_vision')
+def on_request_vision():
+    """Called when Agent wants vision data"""
+    global vision_active
+    vision_active = True
+    print("📹 Vision requested by Agent")
 
 def send_vision_data(objects, faces, names):
     """Send vision data to Agent"""
@@ -87,10 +96,11 @@ threading.Thread(target=frame_reader, daemon=True).start()
 
 try:
     sio.connect(SIM_URL, transports=['websocket'])
-    print("✅ Socket connected for vision data")
 except Exception as e:
     print(f"⚠️ Could not connect socket: {e}")
 
+# Wait for vision requests - only send when asked
+# But run detection continuously for better face detection
 while True:
     current_time = time.time()
 
@@ -121,58 +131,71 @@ while True:
         objects = detector.detect_objects(frame_copy, confidence_threshold=Object_Confidence_Threshold)
         last_objects = objects
 
+        # Print detection results
+        if last_faces or last_objects:
+            print("\n" + "="*50)
+            print("📷 VISION DETECTION:")
+            print("-"*50)
+            for face, name in zip(last_faces, last_names):
+                print(f"  👤 Face: {name}")
+            for obj in last_objects:
+                print(f"  📦 Object: {obj['name']}")
+            print("="*50 + "\n")
+        
+        # Always send data to Agent via socket
         send_vision_data(last_objects, last_faces, last_names)
+        
+        # Only use request system if we need to trigger (for backward compat)
 
-        face_list = []
-        h, w = frame_copy.shape[:2]
-        for face, name in zip(last_faces, last_names):
-            top, right, bottom, left = face["box"]
-            width_px = right - left
-            height_px = bottom - top
-            width_pct = (width_px / w) * 100
-            height_pct = (height_px / h) * 100
-            face_list.append(
-                f"{name}: {width_px}x{height_px}px ({width_pct:.1f}% x {height_pct:.1f}%)"
-            )
+        if SHOW_WINDOW:
+            face_list = []
+            h, w = frame_copy.shape[:2]
+            for face, name in zip(last_faces, last_names):
+                top, right, bottom, left = face["box"]
+                width_px = right - left
+                height_px = bottom - top
+                width_pct = (width_px / w) * 100
+                height_pct = (height_px / h) * 100
+                face_list.append(
+                    f"{name}: {width_px}x{height_px}px ({width_pct:.1f}% x {height_pct:.1f}%)"
+                )
 
-        obj_list = []
-        for obj in last_objects:
-            bbox = obj["bbox"]
-            conf = obj.get("confidence", 1.0)
-            obj_list.append(
-                f"{obj['name']} ({conf*100:.1f}% conf)"
-            )
+            obj_list = []
+            for obj in last_objects:
+                bbox = obj["bbox"]
+                conf = obj.get("confidence", 1.0)
+                obj_list.append(
+                    f"{obj['name']} ({conf*100:.1f}% conf)"
+                )
 
-        print("\033c", end="")
-        print("Detected Faces:")
-        for f in face_list:
-            print(" -", f)
-        print("\nObjects:")
-        for o in obj_list:
-            print(" -", o)
+            print("\033c", end="")
+            print("Detected Faces:")
+            for f in face_list:
+                print(" -", f)
+            print("\nObjects:")
+            for o in obj_list:
+                print(" -", o)
+            
+            for face, name in zip(last_faces, last_names):
+                top, right, bottom, left = face["box"]
+                cv2.rectangle(frame_copy, (left, top), (right, bottom), (0, 255, 0), 2)
+                cv2.putText(frame_copy, name, (left, top-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-    for face, name in zip(last_faces, last_names):
-        top, right, bottom, left = face["box"]
-        cv2.rectangle(frame_copy, (left, top), (right, bottom), (0, 255, 0), 2)
-        cv2.putText(frame_copy, name, (left, top-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            h, w = frame_copy.shape[:2]
+            for obj in last_objects:
+                bbox = obj["bbox"]
+                x1 = int(bbox["xmin"] * w)
+                y1 = int(bbox["ymin"] * h)
+                x2 = int(bbox["xmax"] * w)
+                y2 = int(bbox["ymax"] * h)
+                cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                cv2.putText(frame_copy, obj["name"], (x1, y1-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    h, w = frame_copy.shape[:2]
-    for obj in last_objects:
-        bbox = obj["bbox"]
-        x1 = int(bbox["xmin"] * w)
-        y1 = int(bbox["ymin"] * h)
-        x2 = int(bbox["xmax"] * w)
-        y2 = int(bbox["ymax"] * h)
-        cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.putText(frame_copy, obj["name"], (x1, y1-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-
-    if SHOW_WINDOW:
-        cv2.imshow("Detection", frame_copy)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+            cv2.imshow("Detection", frame_copy)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                exit()
 
 cap.release()
 cv2.destroyAllWindows()

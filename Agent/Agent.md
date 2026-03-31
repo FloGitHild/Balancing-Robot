@@ -284,7 +284,7 @@ vision_get_summary() → "Objects: 2, Faces: 1, Known people: John"
 
 ---
 
-#### 6. Audio Input (`tools/audio_input.py`)
+### 6. Audio Input (`tools/audio_input.py`)
 
 Listen to and transcribe speech.
 
@@ -294,6 +294,54 @@ Listen to and transcribe speech.
 | `audio_input_is_listening` | Check if listening | (none) |
 
 **Example usage:**
+```
+audio_input_get_transcriptions(limit=5)  → "Recent Transcriptions:
+  - [12:30:15] Hello robot
+  - [12:30:45] How are you?"
+
+audio_input_is_listening()  → "True"
+```
+
+---
+
+### 7. Audio Output (`tools/audio_output.py`)
+
+Play audio or generate speech.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `audio_output_play_file` | Play audio file | `filepath`: path to .wav/.mp3 |
+| `audio_output_play_tts` | Generate and play TTS | `text`: text to speak, `voice`: voice name |
+| `audio_output_queue` | Queue audio for later | `filepath`: path to audio file |
+| `audio_output_get_queue` | Show queue status | (none) |
+| `audio_output_stop` | Stop playback | (none) |
+
+**Example usage:**
+```
+audio_output_play_file(filepath="data/audio/greeting.wav")  → "Playing: greeting.wav"
+audio_output_play_tts(text="Hello! I am your robot assistant!")  → "TTS: Hello!..."
+audio_output_get_queue()  → "Queue: 1. greeting.wav"
+audio_output_stop()      → "Stopped"
+```
+
+---
+
+### 8. Memory (`tools/memory.py`)
+
+Remember interactions with specific people.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `memory_remember` | Remember something about current person | `what`: what to remember |
+| `memory_recall` | Recall previous interactions | `person`: name, `limit`: number |
+| `memory_get_people` | Get list of known people | (none) |
+
+**Example usage:**
+```
+memory_remember(what="Likes cats")     → "Added interaction with John: Likes cats"
+memory_recall(person="John", limit=3) → "Interactions with John:
+  - [2024-01-01T12:00] Likes cats"
+memory_get_people()  → "['John', 'Alice']"
 ```
 audio_input_get_transcriptions(limit=5)  → "Recent Transcriptions:
   - [12:30:15] Hello robot

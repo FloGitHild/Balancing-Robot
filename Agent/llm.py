@@ -4,7 +4,7 @@ import os
 from typing import Optional, Dict, Any, List
 
 class OllamaLLM:
-    def __init__(self, model: str = "llama3.2", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = "llama3.2:latest", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url
         self._check_connection()
@@ -28,7 +28,11 @@ class OllamaLLM:
         payload = {
             "model": self.model,
             "messages": messages,
-            "stream": False
+            "stream": False,
+            "options": {
+                "num_ctx": 8192,  # Increase context window
+                "num_predict": 512  # Limit response length
+            }
         }
         if tools:
             payload["tools"] = tools
@@ -41,7 +45,19 @@ class OllamaLLM:
             )
             if response.status_code == 200:
                 result = response.json()
-                return result.get("message", {}).get("content", "")
+                
+                # Get the message object
+                msg = result.get("message", {})
+                content = msg.get("content", "")
+                tool_calls = msg.get("tool_calls", [])
+                
+                # If there are tool calls, return them along with content
+                if tool_calls:
+                    return {
+                        "content": content,
+                        "tool_calls": tool_calls
+                    }
+                return content
             else:
                 print(f"❌ LLM error: {response.status_code}")
                 return "Error: Could not get response from LLM"

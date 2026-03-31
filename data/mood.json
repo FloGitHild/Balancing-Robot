@@ -1,0 +1,150 @@
+{
+  "current": "happy",
+  "history": [
+    {
+      "from": "neutral",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:23:17.029712"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:23:22.527383"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:23:29.268013"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:24:28.997166"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:24:37.885193"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:24:49.060124"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:26:02.341678"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:26:03.839291"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:26:06.417196"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:26:26.738365"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:29:34.551107"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:29:48.558878"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:42:11.622402"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:13.186717"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:21.531609"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:24.721590"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:39.196314"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:42.669156"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:44:51.581196"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:45:09.769578"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:53:06.062845"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:53:15.368709"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:53:18.328974"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:54:47.671082"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:54:49.567321"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T20:54:53.672035"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T21:04:57.148154"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T21:41:09.020151"
+    },
+    {
+      "from": "happy",
+      "to": "happy",
+      "timestamp": "2026-03-31T22:12:36.951000"
+    }
+  ]
+}
