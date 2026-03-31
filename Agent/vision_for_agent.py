@@ -5,7 +5,7 @@ import threading
 import time
 import socketio
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Agent'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Lokal'))
 from detector import Detector
 from face_db import FaceDB
 import face_recognition
@@ -14,6 +14,8 @@ STREAM_URL = "http://localhost:5000/video_feed"
 SIM_URL = "http://localhost:5000"
 Face_Recog_Tolerance = 0.6
 Object_Confidence_Threshold = 0.6
+SHOW_WINDOW = False  # Set True to show detection window (slower)
+ANALYSIS_INTERVAL = 1.0  # Seconds between analysis runs
 
 detector = Detector()
 db = FaceDB()
@@ -26,11 +28,12 @@ if not cap.isOpened():
     exit()
 
 print("✅ Stream läuft!")
-cv2.namedWindow("Detection", cv2.WINDOW_NORMAL)
+if SHOW_WINDOW:
+    cv2.namedWindow("Detection", cv2.WINDOW_NORMAL)
 
 latest_frame = None
 frame_lock = threading.Lock()
-interval = 1.0
+interval = ANALYSIS_INTERVAL
 last_time = 0
 
 last_faces = []
@@ -165,7 +168,8 @@ while True:
         cv2.putText(frame_copy, obj["name"], (x1, y1-10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    cv2.imshow("Detection", frame_copy)
+    if SHOW_WINDOW:
+        cv2.imshow("Detection", frame_copy)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break

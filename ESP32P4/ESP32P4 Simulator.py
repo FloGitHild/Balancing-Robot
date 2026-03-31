@@ -36,19 +36,24 @@ temp_audio_chunks = []
 # -----------------------------
 # KAMERA THREAD
 # -----------------------------
+CAPTURE_WIDTH = 1280
+CAPTURE_HEIGHT = 720
+STREAM_QUALITY = 70  # JPEG quality for web stream (1-100)
+NO_STREAM = False  # Set True to disable video feed (improves performance)
+
 def camera_thread():
     global video_frame
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("❌ Kamera konnte nicht geöffnet werden!")
         return
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
     print(f"✅ Kamera gestartet mit Auflösung: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
     while True:
         ret, frame = cap.read()
-        if ret:
-            _, buffer = cv2.imencode('.jpg', frame)
+        if ret and not NO_STREAM:
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_QUALITY])
             video_frame = base64.b64encode(buffer).decode('utf-8')
         time.sleep(0.03)  # ~30 FPS
 

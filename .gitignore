@@ -24,3 +24,7 @@ yolov8l.pt
 yolov8n.pt
 yolov8x.pt
 /home/florian/data/Florian/Freizeit/Balancing_Robot/path/to/venv./
+__pycashe__/
+*.pyc
+*.pyo
+*.egg-info/
