@@ -335,6 +335,10 @@ def reset():
     state['last_input'] = ""  # Optional: letzte Eingabe löschen
     print("🔄 Robot state zurückgesetzt")
 
+@socketio.on('vision_update')
+def vision_update(data):
+    pass
+
 
 # -----------------------------
 # BROADCAST LOOP (Auto-Update + Terminal Debug)
