@@ -54,3 +54,6 @@ AI Agent:
 
     Memory:
         The AI Agent uses multiple memory files, to remember tasks, make short and longterm tasks. It should remember interactions with different people as well.
+
+
+        
