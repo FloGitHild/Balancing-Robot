@@ -3,7 +3,7 @@ import face_recognition
 import os
 import pickle
 
-DB_PATH = r"D:\Florian\Freizeit\Balancing_Robot\face_database\faces.pkl"
+DB_PATH = r"/home/florian/data/Florian/Freizeit/Balancing_Robot/face_database/faces.pkl"
 
 class FaceDB:
     def __init__(self):

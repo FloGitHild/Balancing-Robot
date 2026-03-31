@@ -1,12 +1,18 @@
 import base64
 import cv2
 import numpy as np
-import sounddevice as sd
-import soundfile as sf
+try:
+    import sounddevice as sd
+    import soundfile as sf
+    AUDIO_AVAILABLE = True
+except OSError:
+    print("⚠️ PortAudio nicht verfügbar - Audio deaktiviert")
+    AUDIO_AVAILABLE = False
+    sd = None
+    sf = None
 from flask import Flask, render_template_string, Response
 from flask_socketio import SocketIO
-import threading, time, io
-import sys
+import threading, time, io, sys
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -32,7 +38,7 @@ temp_audio_chunks = []
 # -----------------------------
 def camera_thread():
     global video_frame
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("❌ Kamera konnte nicht geöffnet werden!")
         return
@@ -51,14 +57,18 @@ threading.Thread(target=camera_thread, daemon=True).start()
 # -----------------------------
 def play_audio_thread():
     while True:
-        if audio_queue:
-            audio_data, samplerate = audio_queue.pop(0)
-            sd.play(audio_data, samplerate=samplerate)
-            sd.wait()
+        if audio_queue and AUDIO_AVAILABLE:
+            try:
+                audio_data, samplerate = audio_queue.pop(0)
+                sd.play(audio_data, samplerate=samplerate)  # type: ignore
+                sd.wait()  # type: ignore
+            except Exception as e:
+                print(f"⚠️ Audio-Fehler: {e}")
         else:
             time.sleep(0.05)
 
-threading.Thread(target=play_audio_thread, daemon=True).start()
+if AUDIO_AVAILABLE:
+    threading.Thread(target=play_audio_thread, daemon=True).start()
 
 # -----------------------------
 # VIDEO GENERATOR
@@ -227,10 +237,13 @@ socket.on('audio_stream', function(data){
 });
 
 socket.on('play_audio', function(data){
+    console.log('Empfange Audio-Daten, Länge:', data.length);
     var audio = document.createElement('audio');
     audio.src = 'data:audio/wav;base64,' + data;
-    audio.autoplay = true;
+    audio.controls = true;
+    audio.style.margin = '10px';
     document.body.appendChild(audio);
+    audio.play().then(() => console.log('Audio wird abgespielt')).catch(e => console.log('Autoplay blocked, klicken Sie auf Play:', e));
 });
 </script>
 </body>
@@ -290,14 +303,21 @@ def play_audio_chunk(data):
 
 @socketio.on('play_audio_end')
 def play_audio_end():
+    if not AUDIO_AVAILABLE:
+        return
     global temp_audio_chunks
     full_audio = b''.join(temp_audio_chunks)
     file_like = io.BytesIO(full_audio)
-    audio_data, samplerate = sf.read(file_like, dtype='int16')
+    audio_data, samplerate = sf.read(file_like, dtype='int16')  # type: ignore
     if len(audio_data.shape) > 1:
         audio_data = audio_data.mean(axis=1).astype(np.int16)
     audio_queue.append((audio_data, samplerate))
     print(f"🎵 Audio in Queue, {len(audio_data)} Samples, {samplerate} Hz")
+    
+    b64_audio = base64.b64encode(full_audio).decode('utf-8')
+    socketio.emit('play_audio', b64_audio)
+    print(f"📢 play_audio Event gesendet an Website, Größe: {len(b64_audio)} Zeichen")
+    
     socketio.emit('audio_stream','start')
     temp_audio_chunks = []
 
@@ -343,7 +363,7 @@ def broadcast():
         sys.stdout.write("\033[H\033[J" + text)
         sys.stdout.flush()
 
-        socketio.sleep(0.1)  # 20 Hz
+        socketio.sleep(0.05)  # 1 second interval
 
 socketio.start_background_task(broadcast)
 

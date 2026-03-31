@@ -5,7 +5,7 @@ import time
 import base64
 
 SIM_URL = 'http://127.0.0.1:5000'
-AUDIO_FILE = r'D:\Florian\Freizeit\Balancing_Robot\Lokal\test.wav'
+AUDIO_FILE = r'/home/florian/data/Florian/Freizeit/Balancing_Robot/Lokal/test.wav'
 CHUNK_SIZE = 30000  # ~30 KB pro Chunk
 
 sio = socketio.Client(logger=False, engineio_logger=False)

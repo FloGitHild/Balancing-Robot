@@ -1,6 +1,6 @@
 import pickle
 
-DB_PATH = r"D:\Florian\Freizeit\Balancing_Robot\face_database\faces.pkl"
+DB_PATH = r"/home/florian/data/Florian/Freizeit/Balancing_Robot/face_database/faces.pkl"
 
 with open(DB_PATH, "rb") as f:
     encodings, names = pickle.load(f)
