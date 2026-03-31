@@ -159,7 +159,174 @@ Agent: executes movements.move("forward")
 LLM: "Hello! I'm coming to say hi!"
 ```
 
-### 5. Memory System
+### Available Tools
+
+Each tool is a separate file in the `tools/` folder. Here's what each one can do:
+
+---
+
+#### 1. Movements (`tools/movements.py`)
+
+Controls the robot's physical movement.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `move` | Control movement direction | `direction`: forward, backward, left, right, stop |
+| `speed` | Set movement speed (0-100) | `value`: 0-100 |
+| `head` | Control head position | `rotate`: -90 to 90, `tilt`: -90 to 90 |
+| `arm` | Control arm position | `side`: left/right, `h`: horizontal -90 to 90, `v`: vertical -90 to 90 |
+
+**Example usage:**
+```
+move(direction="forward")    → "Moving forward"
+speed(value=50)              → "Speed set to 50"
+head(rotate=20, tilt=10)     → "Head set - rotate: 20, tilt: 10"
+arm(side="left", h=30, v=45) → "Left arm set - h: 30, v: 45"
+```
+
+---
+
+#### 2. Research (`tools/research.py`)
+
+Search the internet for information.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `research_search` | Search the web | `query`: search string |
+| `research_wikipedia` | Get Wikipedia summary | `topic`: article name |
+| `research_weather` | Get weather info | `location`: city name |
+
+**Example usage:**
+```
+research_search(query="Python programming")  → "Search completed for: Python..."
+research_wikipedia(topic="Berlin")          → "📖 Berlin\nBerlin is the capital..."
+research_weather(location="Berlin")          → "Weather for Berlin: ..."
+```
+
+---
+
+#### 3. Tasks (`tools/tasks.py`)
+
+Manage todo lists and reminders.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `tasks_add_global` | Add global task/timer | `task`: description, `due`: optional datetime, `priority`: low/normal/high |
+| `tasks_add_mode` | Add mode-specific task | `mode`: Play/Assist/Explore/Auto/Idle, `task`: description |
+| `tasks_list_global` | List all global tasks | (none) |
+| `tasks_list_mode` | List tasks for mode | `mode`: mode name |
+| `tasks_complete_global` | Mark global task done | `task_id`: task ID |
+| `tasks_complete_mode` | Mark mode task done | `mode`: mode name, `task_id`: task ID |
+
+**Example usage:**
+```
+tasks_add_global(task="Call mom at 5pm", due="17:00", priority="high")
+tasks_add_mode(mode="Play", task="Find a ball")
+tasks_list_global()       → "Global Tasks: ○ [1] Call mom..."
+tasks_complete_global(task_id=1)  → "Completed: Call mom at 5pm"
+```
+
+---
+
+#### 4. Mood (`tools/mood.py`)
+
+Set the robot's mood (affects LEDs and expressions).
+
+| Mood | LED Color | Description |
+|------|-----------|-------------|
+| neutral | Green | Default state |
+| happy | Cyan | Happy and playful |
+| sad | Blue | Sad or empathetic |
+| curious | Yellow | Curious or interested |
+| excited | Magenta | Excited or enthusiastic |
+| thinking | Purple | Thinking or processing |
+| surprised | Orange | Surprised or amazed |
+| scared | Red | Scared or cautious |
+| angry | Red | Angry or frustrated |
+| relaxed | Light Blue | Relaxed or calm |
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `mood_set` | Set robot mood | `mood`: one of the moods above |
+| `mood_get_current` | Get current mood info | (none) |
+| `mood_get_history` | Get mood change history | `limit`: number of entries |
+
+**Example usage:**
+```
+mood_set(mood="happy")     → "Mood changed from neutral to happy 😄"
+mood_get_current()        → "{'mood': 'happy', 'emoji': '😄', 'led_color': [0, 255, 255]}"
+mood_get_history()        → "Mood History: neutral → happy at 2024-01-01T12:00:00"
+```
+
+---
+
+#### 5. Vision (`tools/vision.py`)
+
+Get information about what the robot sees.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `vision_get_objects` | List detected objects with positions | (none) |
+| `vision_get_faces` | List detected faces with names | (none) |
+| `vision_get_summary` | Quick summary for LLM | (none) |
+
+**Example usage:**
+```
+vision_get_objects()  → "Detected Objects:
+  - cup: 30%-50% width, 40%-60% height (90% conf)
+  - person: 20%-40% width, 10%-50% height (95% conf)"
+
+vision_get_faces()    → "Detected Faces:
+  - John: box[100, 50, 200, 150]"
+
+vision_get_summary() → "Objects: 2, Faces: 1, Known people: John"
+```
+
+---
+
+#### 6. Audio Input (`tools/audio_input.py`)
+
+Listen to and transcribe speech.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `audio_input_get_transcriptions` | Get recent transcriptions | `limit`: number of entries |
+| `audio_input_is_listening` | Check if listening | (none) |
+
+**Example usage:**
+```
+audio_input_get_transcriptions(limit=5)  → "Recent Transcriptions:
+  - [12:30:15] Hello robot
+  - [12:30:45] How are you?"
+
+audio_input_is_listening()  → "True"
+```
+
+---
+
+#### 7. Audio Output (`tools/audio_output.py`)
+
+Play audio or generate speech.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `audio_output_play_file` | Play audio file | `filepath`: path to .wav/.mp3 |
+| `audio_output_play_tts` | Generate and play TTS | `text`: text to speak, `voice`: voice name |
+| `audio_output_queue` | Queue audio for later | `filepath`: path to audio file |
+| `audio_output_get_queue` | Show queue status | (none) |
+| `audio_output_stop` | Stop playback | (none) |
+
+**Example usage:**
+```
+audio_output_play_file(filepath="data/audio/greeting.wav")  → "Playing: greeting.wav"
+audio_output_play_tts(text="Hello! I am your robot assistant!")  → "TTS: Hello!..."
+audio_output_get_queue()  → "Queue: 1. greeting.wav"
+audio_output_stop()      → "Stopped"
+```
+
+---
+
+### 6. Memory System
 
 The agent has memory to remember things:
 
@@ -178,7 +345,7 @@ memory:
     ]
 ```
 
-### 6. Vision System
+### 7. Vision System
 
 The vision system provides what the robot sees:
 
