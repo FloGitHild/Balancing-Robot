@@ -42,7 +42,9 @@ def camera_thread():
     if not cap.isOpened():
         print("❌ Kamera konnte nicht geöffnet werden!")
         return
-    print("✅ Kamera gestartet")
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    print(f"✅ Kamera gestartet mit Auflösung: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
     while True:
         ret, frame = cap.read()
         if ret:
@@ -157,6 +159,9 @@ input[type=range] { width: 200px; }
         <h3>Emotion 😃</h3>
         <div id="emotion">Neutral</div>
 
+        <h3>Audio 🔊</h3>
+        <div id="audio_indicator" style="font-size: 24px;">❌</div>
+
         <h3>Command Input 📝</h3>
         <input id="cmd" type="text" placeholder="Gib Befehl ein" 
             onkeydown="if(event.key==='Enter'){sendCmd();}">
@@ -218,6 +223,7 @@ Audio          : ${data.audio ? "🔊" : "❌"}
     document.getElementById('left_v').value = data.arms.left.v;
     document.getElementById('right_h').value = data.arms.right.h;
     document.getElementById('right_v').value = data.arms.right.v;
+    document.getElementById('audio_indicator').innerText = data.audio ? "🔊" : "❌";
 }
 
 socket.on('state', function(data){
@@ -236,15 +242,7 @@ socket.on('audio_stream', function(data){
     }
 });
 
-socket.on('play_audio', function(data){
-    console.log('Empfange Audio-Daten, Länge:', data.length);
-    var audio = document.createElement('audio');
-    audio.src = 'data:audio/wav;base64,' + data;
-    audio.controls = true;
-    audio.style.margin = '10px';
-    document.body.appendChild(audio);
-    audio.play().then(() => console.log('Audio wird abgespielt')).catch(e => console.log('Autoplay blocked, klicken Sie auf Play:', e));
-});
+
 </script>
 </body>
 </html>
@@ -318,7 +316,12 @@ def play_audio_end():
     socketio.emit('play_audio', b64_audio)
     print(f"📢 play_audio Event gesendet an Website, Größe: {len(b64_audio)} Zeichen")
     
+    state['audio'] = True
     socketio.emit('audio_stream','start')
+    def reset_audio():
+        time.sleep(0.5)
+        state['audio'] = False
+    socketio.start_background_task(reset_audio)
     temp_audio_chunks = []
 
 @socketio.on('reset')
