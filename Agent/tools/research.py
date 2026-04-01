@@ -83,8 +83,15 @@ class Research:
     
     def get_weather(self, location: str = "") -> str:
         """Get weather using wetter.com (primary) with Open-Meteo as fallback"""
+        # If no location or vague location, try to get from IP
+        if not location or location.lower() in ["my location", "current location", "here", "当前位置"]:
+            ip_location = self._get_location_from_ip()
+            if ip_location:
+                location = ip_location
+                print(f"📍 Detected location from IP: {location}")
+        
         if not location:
-            return "No location provided"
+            return "No location provided. Please specify a city."
         
         wetter_result = self._get_wetter_com(location)
         if wetter_result:
@@ -92,6 +99,20 @@ class Research:
         
         openmeteo_result = self._get_open_meteo(location)
         return openmeteo_result if openmeteo_result else f"Could not get weather for {location}"
+    
+    def _get_location_from_ip(self) -> Optional[str]:
+        """Get current location from IP address"""
+        try:
+            response = self.session.get("http://ip-api.com/json/?fields=status,country,city", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    city = data.get("city", "")
+                    country = data.get("country", "")
+                    return f"{city}, {country}" if city and country else city
+        except:
+            pass
+        return None
     
     def _get_wetter_com(self, location: str) -> Optional[str]:
         """Scrape weather from wetter.com"""

@@ -6,6 +6,7 @@ import base64
 import io
 import threading
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,13 +35,21 @@ from tools.mood import Mood
 from tools.vision import Vision
 from tools.audio_input import AudioInput
 from tools.audio_output import AudioOutput
+from tools.scheduler import Scheduler
+import config
 
 class Agent:
     def __init__(self, 
-                 model: str = "llama3.2:latest",
-                 mode: str = "Idle",
+                 model: str = None,
+                 mode: str = None,
                  robot_url: str = "http://localhost:5000"):
         print("🚀 Initializing Agent...")
+        
+        # Use config values if not specified
+        if model is None:
+            model = config.LLM_CONFIG["default_model"]
+        if mode is None:
+            mode = config.DEFAULT_MODE
         
         self.mode = mode
         self.robot_url = robot_url
@@ -53,6 +62,7 @@ class Agent:
         self.vision = Vision()
         self.audio_input = AudioInput()
         self.audio_output = AudioOutput()
+        self.scheduler = Scheduler()
         
         self.sio = None
         self._setup_socket()
@@ -62,6 +72,9 @@ class Agent:
         
         self.conversation_history: List[Dict[str, str]] = []
         self.running = False
+        
+        self.current_mission: Optional[str] = None
+        self.mission_completed = False
         
         print("✅ Agent initialized!")
     
@@ -83,9 +96,14 @@ class Agent:
                 
                 @self.sio.on('vision_update')
                 def on_vision_update(data):
-                    """Receive vision updates from vision_for_agent"""
+                    """Receive vision updates when requested"""
                     print(f"📥 Agent got vision: {data}")
                     self.vision.update_from_dict(data)
+                    
+                @self.sio.on('request_vision')
+                def on_request_vision():
+                    """Request fresh vision data"""
+                    pass  # Will request on-demand in run_once
                 
                 @self.sio.on('agent_command')
                 def on_agent_command(cmd):
@@ -196,23 +214,21 @@ class Agent:
             import edge_tts
             import asyncio
             
-            max_chars = 500
+            max_chars = 300  # Reduced for speed
             if len(text) > max_chars:
-                text = text[:max_chars]
+                text = text[:max_chars] + "..."
             
             lang = self._detect_language(text)
             
-            # Edge TTS voices with child-like settings
             if lang == "de":
                 voice = "de-DE-KatjaNeural"
             else:
                 voice = "en-US-JennyNeural"
             
-            # Fast (+20%) and higher pitch (+60Hz) for child-like voice
             mp3_file = '/tmp/tts_edge.mp3'
             
             async def generate():
-                communicate = edge_tts.Communicate(text, voice, rate="+20%", pitch="+60Hz")
+                communicate = edge_tts.Communicate(text, voice, rate="+30%", pitch="+50Hz")
                 await communicate.save(mp3_file)
             
             asyncio.run(generate())
@@ -225,16 +241,18 @@ class Agent:
             return None
     
     def speak(self, text: str):
-        """Print and speak text to robot"""
+        """Print and speak text to robot (non-blocking)"""
         print(f"🤖 Bot: {text}")
         
-        # Generate TTS and send to robot
-        tts_audio = self._generate_tts(text)
+        # Run TTS in background thread to not block agent
+        def _tts_thread():
+            tts_audio = self._generate_tts(text)
+            if tts_audio:
+                self._send_audio_to_robot(tts_audio)
+            else:
+                print("🔊 (TTS not available)")
         
-        if tts_audio:
-            self._send_audio_to_robot(tts_audio)
-        else:
-            print("🔊 (TTS not available)")
+        threading.Thread(target=_tts_thread, daemon=True).start()
     
     def _build_tools(self) -> list:
         """Combine all tool definitions"""
@@ -290,8 +308,13 @@ class Agent:
                 }
             }
         ]
+        tools.extend(self.scheduler.get_tools())
     
     def _build_system_prompt(self) -> str:
+        # Get mode-specific instructions
+        mode_info = config.MODES.get(self.mode, {})
+        mode_instructions = mode_info.get("description", "")
+        
         return f"""You are a SINGLE robot assistant (not multiple). 
 You are one AI. Use "I", "me", "my" - NEVER "we", "us", "our".
 
@@ -300,8 +323,23 @@ IMPORTANT:
 2. Keep responses SHORT and CONCISE - maximum 1-2 sentences.
 3. Don't use complicated descriptions or actions in your response.
 
+CRITICAL - STOP AFTER 1-2 TOOL CALLS:
+- Use MAXIMUM 2 tools per request
+- If you have enough information to answer, STOP calling tools
+- Don't keep calling the same tool repeatedly
+- After getting tool results, provide your FINAL answer immediately
+
+Current Mode: {self.mode}
+- {mode_instructions}
+
+Mode Rules:
+- Idle: ONLY respond to direct user input. DO NOT create missions or actions. Wait for someone to talk to you.
+- Play: Search for people to play with, make jokes
+- Assist: Offer help, take notes, set timers
+- Explore: Drive around, find new things
+- Auto: Make your own decisions freely
+
 Current State:
-- Mode: {self.mode}
 - Mood: {self.mood.get_current()['mood']}
 
 CRITICAL RULES:
@@ -315,13 +353,15 @@ CRITICAL RULES:
 IMPORTANT: If vision shows "Known people: Florian" and user asks "Who am I?" -> Answer: "You are Florian!"
 
 You have tools: 
-- research_weather, research_wikipedia, research_search 
-- vision_get_summary
-- memory_remember (remember something about current person), memory_recall (recall previous interactions)
+- research_weather, research_wikipedia, research_search, research_get_time, research_time_until
+- vision_get_summary, vision_get_objects, vision_get_faces
+- memory_remember, memory_recall
+- scheduler_add_timer, scheduler_add_scheduled, scheduler_add_recurring, scheduler_list
+- move, speed, head, arm
 
 Available modes: Play, Assist, Explore, Auto, Idle
 
-Respond in short sentences using verified tool results."""
+After using tools, provide your FINAL answer in plain text - NOT as tool calls."""
 
     def set_mode(self, mode: str) -> str:
         """Change the robot mode"""
@@ -336,6 +376,10 @@ Respond in short sentences using verified tool results."""
     
     def run_once(self, user_input: Optional[str] = None) -> str:
         """Run agent cycle - think first, then act"""
+        
+        # Request fresh vision data at start of each cycle
+        self.request_vision_update()
+        
         vision_info = self.vision.get_summary()
         
         # Get memory context for current known people
@@ -350,8 +394,16 @@ Respond in short sentences using verified tool results."""
                     if mem and "No interactions" not in mem:
                         memory_context += f"\nPrevious with {name}: {mem.split(chr(10), 2)[-1][:100]}"
         
-        # Step 1: Ask LLM what to do (without tools)
-        messages = [
+        # Build initial messages for first LLM call
+        print("\n" + "="*50)
+        print(f"🔄 AGENT STARTING")
+        print("-"*50)
+        print(f"User: {user_input}")
+        print(f"Vision: {vision_info[:100]}...")
+        print("="*50 + "\n")
+        
+        # Build initial messages for first LLM call
+        current_messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_input or ""},
             {"role": "user", "content": f"\nCurrent Vision: {vision_info}"},
@@ -359,39 +411,66 @@ Respond in short sentences using verified tool results."""
             {"role": "user", "content": f"Memory Context: {memory_context}" if memory_context else ""}
         ]
         
-        # Print prompt for debugging
-        print("\n" + "="*50)
-        print("📝 PROMPT TO LLM:")
-        print("-"*50)
-        for m in messages:
-            print(f"{m['role']}: {m['content'][:200]}...")
-        print("="*50 + "\n")
+        iteration = 0
+        max_iterations = config.AGENT_CONFIG.get("max_iterations", 5)
+        last_result = None
         
-        # First, just get a response without tools forcing action
-        response = self.llm.chat(messages, tools=self.tools)
+        while iteration < max_iterations:
+            iteration += 1
+            print(f"\n{'='*50}")
+            print(f"🔄 ITERATION {iteration}")
+            print(f"{'='*50}")
+            
+            response = self.llm.chat(current_messages, tools=self.tools)
+            
+            if isinstance(response, dict):
+                tool_calls = response.get("tool_calls", [])
+                if tool_calls:
+                    print(f"📞 Tool calls: {[tc.get('function', {}).get('name') for tc in tool_calls]}")
+                    
+                    # Execute tools and collect results
+                    results = []
+                    for call in tool_calls:
+                        func = call.get("function", {})
+                        name = func.get("name", "")
+                        args = func.get("arguments", {})
+                        if isinstance(args, str):
+                            args = json.loads(args)
+                        result = self._execute_tool(name, args)
+                        results.append(f"{name}: {result}")
+                        print(f"✅ {name} -> {result[:100]}...")
+                    
+                    tool_results_text = "\n".join(results)
+                    last_result = tool_results_text
+                    
+                    # Request fresh vision after each tool execution
+                    self.request_vision_update()
+                    new_vision = self.vision.get_summary()
+                    
+                    # Continue with tool results - add to messages and loop again
+                    current_messages = [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": f"User asked: {user_input}"},
+                        {"role": "user", "content": f"Previous tool results: {tool_results_text}"},
+                        {"role": "user", "content": f"Current Vision: {new_vision}"},
+                        {"role": "user", "content": "Continue if needed, or provide final answer."}
+                    ]
+                    continue
+            
+            # No tool calls - this is the final response
+            if isinstance(response, dict):
+                final_response = response.get("content", "")
+            else:
+                final_response = response
+            
+            print(f"\n{'='*50}")
+            print(f"🏁 FINAL ANSWER (after {iteration} iteration(s))")
+            print(f"{'='*50}")
+            print(final_response)
+            return final_response
         
-        # Handle tool calls if LLM decides to use them
-        if isinstance(response, dict):
-            tool_calls = response.get("tool_calls", [])
-            if tool_calls:
-                result = self._handle_tool_calls(tool_calls)
-                # Step 2: Ask for final response after tools
-                final_messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": f"User asked: {user_input}"},
-                    {"role": "user", "content": f"Tools executed. Result: {result}"},
-                    {"role": "user", "content": f"Now provide a natural response to the user."}
-                ]
-                final_response = self.llm.chat(final_messages, tools=None)
-                if isinstance(final_response, dict):
-                    final_response = final_response.get("content", "")
-                return final_response if final_response else result
-        
-        if isinstance(response, dict):
-            response = response.get("content", "")
-        
-        # If no tools called, return the response
-        return response if response else "I'm not sure how to respond. Could you try again?"
+        # Max iterations reached
+        return last_result if last_result else "Max iterations reached"
     
     def _handle_tool_calls(self, tool_calls: List[Dict]) -> str:
         """Handle tool calls from the LLM"""
@@ -523,18 +602,62 @@ Respond in short sentences using verified tool results."""
                 return self.memory.get_interactions(args.get("person", ""), args.get("limit", 5))
             elif name == "memory_get_people":
                 return str(self.memory.get_all_people())
+            elif name == "scheduler_add_timer":
+                from datetime import timedelta
+                return f"Timer set for {args.get('minutes')} minutes: {self.scheduler.add_timer(args.get('task', ''), args.get('minutes', 5))}"
+            elif name == "scheduler_add_scheduled":
+                from datetime import datetime
+                time_str = args.get("time", "12:00")
+                try:
+                    due = datetime.strptime(time_str, "%H:%M")
+                    now = datetime.now()
+                    if due.time() < now.time():
+                        due = due.replace(day=now.day + 1)
+                    else:
+                        due = due.replace(day=now.day)
+                    task_id = self.scheduler.add_one_time(args.get("task", ""), due)
+                    return f"Scheduled for {time_str}: Task {task_id}"
+                except:
+                    return "Invalid time format. Use HH:MM"
+            elif name == "scheduler_add_recurring":
+                return f"Recurring task added: {self.scheduler.add_recurring(args.get('task', ''), args.get('interval_minutes', 10))}"
+            elif name == "scheduler_list":
+                return self.scheduler.get_pending()
+            elif name == "scheduler_complete":
+                return self.scheduler.complete(args.get("task_id", 0))
+            elif name == "scheduler_remove":
+                return self.scheduler.remove(args.get("task_id", 0))
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
             return f"Error executing {name}: {e}"
     
     def run(self):
-        """Run the agent in an endless loop"""
+        """Run the agent with heartbeat loop"""
         self.running = True
         self.audio_input.start()
+        self.scheduler.start()
         
-        print(f"\n🤖 Agent running in {self.mode} mode")
-        print("Type 'quit' to exit, 'mode <name>' to change mode\n")
+        self.scheduler.register_callback("task_due", self._on_scheduled_task)
+        
+        # Get heartbeat interval from config based on current mode
+        heartbeat_interval = config.MODES.get(self.mode, {}).get("heartbeat_interval")
+        
+        if heartbeat_interval is None:
+            print(f"\n🤖 Agent running in {self.mode} mode")
+            print("💤 No automatic heartbeat - waiting for user input")
+        else:
+            # Add recurring task for heartbeat
+            heartbeat_task = f"Heartbeat for {self.mode}"
+            self.scheduler.add_recurring(heartbeat_task, heartbeat_interval // 60 if heartbeat_interval >= 60 else 1)
+            print(f"\n🤖 Agent running in {self.mode} mode")
+            print(f"❤️ Heartbeat: {heartbeat_interval}s | Type 'quit' to exit, 'mode <name>' to change mode\n")
+        
+        import threading
+        heartbeat_event = threading.Event()
+        
+        heartbeat_thread = threading.Thread(target=self._heartbeat_loop, args=(heartbeat_event,), daemon=True)
+        heartbeat_thread.start()
         
         while self.running:
             try:
@@ -545,24 +668,112 @@ Respond in short sentences using verified tool results."""
                 elif user_input.lower().startswith("mode "):
                     new_mode = user_input[5:].strip()
                     print(f"🤖 {self.set_mode(new_mode)}")
+                    # Update heartbeat for new mode
+                    heartbeat_interval = config.MODES.get(self.mode, {}).get("heartbeat_interval")
+                    if heartbeat_interval is None:
+                        print("💤 No automatic heartbeat")
+                    else:
+                        print(f"❤️ Heartbeat: {heartbeat_interval}s")
                 else:
                     response = self.run_once(user_input)
                     self.speak(response)
                     
                     if self.audio_output.playback_queue:
                         self.audio_output.play_queue()
-                
+            
             except KeyboardInterrupt:
                 break
             except Exception as e:
                 print(f"Error: {e}")
         
+        heartbeat_event.set()
         self.cleanup()
+    
+    def _heartbeat_loop(self, stop_event):
+        """Heartbeat loop - runs every 2 minutes"""
+        import time
+        while not stop_event.is_set():
+            try:
+                self._run_heartbeat()
+            except Exception as e:
+                print(f"Heartbeat error: {e}")
+            
+            stop_event.wait(timeout=120)
+    
+    def _run_heartbeat(self):
+        """Execute heartbeat: check scheduled tasks, run missions"""
+        print("\n" + "="*50)
+        print("❤️ HEARTBEAT - " + datetime.now().strftime("%H:%M:%S"))
+        print(f"📍 Mode: {self.mode}")
+        print("="*50)
+        
+        # Check and run due scheduled tasks
+        due_tasks = self.scheduler.get_due_tasks()
+        if due_tasks:
+            print(f"📋 {len(due_tasks)} scheduled tasks due")
+            for task in due_tasks:
+                print(f"  ▶️ Running: {task.task}")
+                response = self.run_once(task.task)
+                self.speak(response)
+                self.scheduler.complete(task.id)
+                time.sleep(2)
+        
+        # Generate new mission based on mode
+        mission = self._generate_mission()
+        if mission:
+            print(f"🎯 New mission: {mission}")
+            response = self.run_once(mission)
+            self.speak(response)
+        
+        print("="*50 + "\n")
+    
+    def _generate_mission(self) -> Optional[str]:
+        """Generate a mission based on current state"""
+        
+        # Idle mode: no automatic missions
+        if self.mode == "Idle":
+            print("💤 Idle mode - no automatic missions")
+            return None
+        
+        vision_info = self.vision.get_summary()
+        
+        messages = [
+            {"role": "system", "content": self.system_prompt + "\n\nYou are in HEARTBEAT mode. Generate a short mission (1 sentence) the robot should do now based on current state. Keep it simple and actionable. If nothing needs to be done, return ONLY 'NONE'."},
+            {"role": "user", "content": f"Current vision: {vision_info}\nCurrent mode: {self.mode}\nTasks: {self.tasks.list_global()[:200]}"}
+        ]
+        
+        response = self.llm.chat(messages, tools=None)
+        if isinstance(response, dict):
+            response = response.get("content", "")
+        
+        if response and response.strip().upper() != "NONE" and len(response.strip()) > 5:
+            self.mission_completed = False
+            return response.strip()
+        return None
+    
+    def _on_scheduled_task(self, task):
+        """Handle a scheduled task being due"""
+        print(f"🔔 Scheduled task due: {task.task}")
+        response = self.run_once(task.task)
+        self.speak(response)
+    
+    def set_mission(self, mission: str):
+        """Manually set a mission"""
+        self.current_mission = mission
+        self.mission_completed = False
+        print(f"🎯 Mission set: {mission}")
+    
+    def complete_mission(self):
+        """Mark current mission as completed"""
+        self.mission_completed = True
+        print(f"✅ Mission completed: {self.current_mission}")
+        self.current_mission = None
     
     def cleanup(self):
         """Clean up resources"""
         self.running = False
         self.audio_input.stop()
+        self.scheduler.stop()
         if self.sio and self.sio.connected:
             self.sio.disconnect()
         print("👋 Agent stopped")

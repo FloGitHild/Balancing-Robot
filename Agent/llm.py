@@ -7,11 +7,12 @@ class OllamaLLM:
     def __init__(self, model: str = "llama3.2:latest", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url
+        self.session = requests.Session()
         self._check_connection()
     
     def _check_connection(self):
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = self.session.get(f"{self.base_url}/api/tags", timeout=5)
             if response.status_code == 200:
                 available = [m["name"] for m in response.json().get("models", [])]
                 print(f"✅ Ollama connected. Available models: {available}")
@@ -30,28 +31,29 @@ class OllamaLLM:
             "messages": messages,
             "stream": False,
             "options": {
-                "num_ctx": 8192,  # Increase context window
-                "num_predict": 512  # Limit response length
+                "num_ctx": 4096,  # Reduced for speed
+                "num_predict": 256,  # Limit response length
+                "temperature": 0.7,
+                "num_gpu": 0,  # Use CPU if no GPU
+                "threads": 4  # Limit threads for faster response
             }
         }
         if tools:
             payload["tools"] = tools
         
         try:
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
-                timeout=120
+                timeout=180  # Increased timeout for slower models
             )
             if response.status_code == 200:
                 result = response.json()
                 
-                # Get the message object
                 msg = result.get("message", {})
                 content = msg.get("content", "")
                 tool_calls = msg.get("tool_calls", [])
                 
-                # If there are tool calls, return them along with content
                 if tool_calls:
                     return {
                         "content": content,
@@ -59,8 +61,11 @@ class OllamaLLM:
                     }
                 return content
             else:
-                print(f"❌ LLM error: {response.status_code}")
+                print(f"❌ LLM error: {response.status_code} - {response.text}")
                 return "Error: Could not get response from LLM"
+        except requests.Timeout:
+            print("❌ LLM request timed out")
+            return "Error: LLM request timed out"
         except Exception as e:
             print(f"❌ LLM request failed: {e}")
             return "Error: LLM request failed"

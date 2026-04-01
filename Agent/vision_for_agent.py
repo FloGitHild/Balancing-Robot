@@ -52,6 +52,17 @@ def on_request_vision():
     global vision_active
     vision_active = True
     print("📹 Vision requested by Agent")
+    # Send current detection results to Agent
+    send_vision_data(last_objects, last_faces, last_names)
+    # Print detection results to terminal
+    print("\n" + "="*50)
+    print("📷 VISION DETECTION (Agent requested):")
+    print("-"*50)
+    for face, name in zip(last_faces, last_names):
+        print(f"  👤 Face: {name}")
+    for obj in last_objects:
+        print(f"  📦 Object: {obj['name']}")
+    print("="*50 + "\n")
 
 def send_vision_data(objects, faces, names):
     """Send vision data to Agent"""
@@ -131,19 +142,10 @@ while True:
         objects = detector.detect_objects(frame_copy, confidence_threshold=Object_Confidence_Threshold)
         last_objects = objects
 
-        # Print detection results
-        if last_faces or last_objects:
-            print("\n" + "="*50)
-            print("📷 VISION DETECTION:")
-            print("-"*50)
-            for face, name in zip(last_faces, last_names):
-                print(f"  👤 Face: {name}")
-            for obj in last_objects:
-                print(f"  📦 Object: {obj['name']}")
-            print("="*50 + "\n")
+        # Detection continues in background for face recognition
         
-        # Always send data to Agent via socket
-        send_vision_data(last_objects, last_faces, last_names)
+        # Only send data to Agent when explicitly requested
+        # send_vision_data is called in on_request_vision handler
         
         # Only use request system if we need to trigger (for backward compat)
 
