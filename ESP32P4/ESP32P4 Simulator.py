@@ -416,7 +416,7 @@ def broadcast():
         sys.stdout.write("\033[H\033[J" + text)
         sys.stdout.flush()
 
-        socketio.sleep(0.05)  # 1 second interval
+        socketio.sleep(0.1)  # 1 second interval
 
 socketio.start_background_task(broadcast)
 

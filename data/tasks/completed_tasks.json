@@ -1,0 +1,19 @@
+[
+  {
+    "id": "fef03511-cbf9-4a24-a5bc-37681d1269b1",
+    "_id_num": 7,
+    "type": "mode",
+    "priority": 4,
+    "priority_name": "LOW",
+    "goal": "Search for people, play games, make jokes",
+    "deadline": null,
+    "status": "completed",
+    "data": {
+      "mode": "Play"
+    },
+    "created_at": "2026-04-01T15:21:15.434840",
+    "started_at": null,
+    "completed_at": "2026-04-01T15:21:22.651683",
+    "result": "research: Found information in 1 file(s):\n\n  File: general.json\n    - robot_facts.controllers: ESP32P4 (main) + ESP32 (movement)"
+  }
+]

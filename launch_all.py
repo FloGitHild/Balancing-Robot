@@ -43,8 +43,8 @@ def main():
     # 3. Start Agent (runs in foreground so you can interact)
     print("🚀 Starting Agent (main program)...")
     proc = subprocess.Popen(
-        ["python3", "agent.py"],
-        cwd=os.path.join(PROJECT_ROOT, "Agent")
+        ["python3", "run_agent.py"],
+        cwd=PROJECT_ROOT
     )
     processes.append(("Agent", proc))
     
