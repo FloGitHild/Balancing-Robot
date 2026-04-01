@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "name": "Mode Play: Main goal for Play mode",
+    "task_type": "mode_mission",
+    "priority": 4,
+    "created_at": "2026-04-01T14:16:56.066713",
+    "due_time": null,
+    "data": {
+      "mode": "Play",
+      "description": "Main goal for Play mode"
+    }
+  }
+]

@@ -595,3 +595,88 @@ llm = OllamaLLM(base_url="http://other-server:11434")  # Different server
 ## License
 
 MIT License
+
+---
+
+## New Features (2026)
+
+### Task Manager (`tools/task_manager.py`)
+
+The Task Manager handles task prioritization and triggers:
+
+#### Priority Levels
+| Priority | Type | Description |
+|----------|------|-------------|
+| 1 - URGENT | Timers | Tasks with due time reached |
+| 2 - HIGH | Face detection | New faces, returning faces |
+| 3 - NORMAL | User input | Commands from terminal/website |
+| 4 - LOW | Mode missions | Auto-generated based on mode |
+
+#### Triggers
+- **Timers**: Scheduled tasks with countdown
+- **User Input**: From terminal or website commands
+- **Face Detection**: New face (first time seen) or returning (after 5+ min)
+- **Mode Changes**: Clear old mode tasks, add new mission
+
+#### Log Files
+- `data/completed_tasks.json` - History of all completed tasks with timing
+- `data/current_tasks.json` - Current pending tasks
+
+#### Usage
+```python
+# Add timer (urgent)
+task_manager.add_timer("Take out trash", 5)
+
+# Add user input (normal)
+task_manager.add_user_input("Hello robot")
+
+# Add mode mission (low)
+task_manager.add_mode_mission("Play", "Find someone to play with")
+
+# Add face trigger (high)
+task_manager.add_face_trigger("Florian", is_new=False)
+```
+
+---
+
+### Audio Manager (`tools/audio_manager.py`)
+
+Search and play audio files:
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `audio_search` | Search sounds by keyword | `query`: search string |
+| `audio_play_category` | Play category sound | `category`: greeting, success, error, music, notification |
+| `audio_list_categories` | List available categories | (none) |
+
+**Example:**
+```
+audio_search(query="hello")  → "Found sounds: hello.mp3, hi.mp3"
+audio_play_category(category="greeting")  → "Playing greeting: hello.mp3"
+```
+
+---
+
+### Task Execution Flow
+
+```
+1. TRIGGER → Task created with priority
+              ↓
+2. QUEUE   → TaskManager sorts by priority
+              ↓
+3. EXECUTE → Agent picks highest priority task
+              ↓
+4. RESULT  → Logged to completed_tasks.json
+              ↓
+5. WAIT    → Near-sleep mode, waiting for next trigger
+```
+
+### Near-Sleep Mode
+
+When no tasks are pending:
+- Agent stops active processing
+- Still listens for triggers:
+  - User input from terminal/website
+  - Face detection (new/returning)
+  - Timer expiration
+  - Mode change

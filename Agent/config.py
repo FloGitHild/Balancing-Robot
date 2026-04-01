@@ -31,13 +31,12 @@ AGENT_VISION_UPDATE_EACH_ITER = True  # Request fresh vision after each tool
 # ==============================================================================
 # MODE-SPECIFIC HEARTBEAT (time between auto-actions in seconds)
 # ==============================================================================
-# None = no automatic actions, just wait for user input
-# 0 = continuous loop, 30 = every 30 seconds, 60 = every minute, etc.
-HEARTBEAT_IDLE = None           # Idle: wait for user (no automatic actions)
-HEARTBEAT_PLAY = 30            # Play: every 30 seconds
-HEARTBEAT_ASSIST = 30          # Assist: every 30 seconds
-HEARTBEAT_EXPLORE = 20         # Explore: every 20 seconds
-HEARTBEAT_AUTO = 10            # Auto: every 10 seconds (fast loop)
+# None = no automatic actions at all
+HEARTBEAT_IDLE = None
+HEARTBEAT_PLAY = None   # No auto missions - only respond to user input
+HEARTBEAT_ASSIST = None
+HEARTBEAT_EXPLORE = None
+HEARTBEAT_AUTO = None
 
 # ==============================================================================
 # TTS (Text-to-Speech) SETTINGS

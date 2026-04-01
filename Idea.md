@@ -55,5 +55,37 @@ AI Agent:
     Memory:
         The AI Agent uses multiple memory files, to remember tasks, make short and longterm tasks. It should remember interactions with different people as well.
 
+    Task System (NEW):
+        The agent uses a TaskManager with priority system:
+        
+        Priority Order:
+        1. URGENT (Priority 1): Timers and due tasks
+        2. HIGH (Priority 2): Face detection (new/returning faces)
+        3. NORMAL (Priority 3): User input from terminal/website
+        4. LOW (Priority 4): Mode-based missions
+        
+        Triggers:
+        - Timers with countdown
+        - User commands (terminal/website)
+        - Face detection (new face or returning after 5+ minutes)
+        - Mode changes
+        
+        Task Flow:
+        1. Task created with priority
+        2. Sorted in TaskManager queue
+        3. Agent executes highest priority task
+        4. Result logged to completed_tasks.json
+        5. Agent waits in near-sleep mode for next trigger
+        
+        Log Files:
+        - data/completed_tasks.json: History of all tasks with timing
+        - data/current_tasks.json: Current pending tasks
+
+    Audio Search (NEW):
+        The agent can search and play audio files:
+        - audio_search: Find sounds by keyword
+        - audio_play_category: Play category (greeting, success, error, music)
+        - audio_list_categories: Show available sounds
+
 
         

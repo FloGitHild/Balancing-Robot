@@ -36,6 +36,8 @@ from tools.vision import Vision
 from tools.audio_input import AudioInput
 from tools.audio_output import AudioOutput
 from tools.scheduler import Scheduler
+from tools.task_manager import TaskManager, TaskPriority, TaskType
+from tools.audio_manager import AudioManager
 import config
 
 # Load config constants
@@ -85,6 +87,10 @@ class Agent:
         self.audio_input = AudioInput()
         self.audio_output = AudioOutput()
         self.scheduler = Scheduler()
+        
+        # New: Task Manager and Audio Manager
+        self.task_manager = TaskManager()
+        self.audio_manager = AudioManager()
         
         self.sio = None
         self._setup_socket()
@@ -286,6 +292,7 @@ class Agent:
         tools.extend(self.vision.get_tools())
         tools.extend(self.audio_input.get_tools())
         tools.extend(self.audio_output.get_tools())
+        tools.extend(self.audio_manager.get_tools())
         tools.extend(self._get_memory_tools())
         return tools
     
@@ -333,73 +340,32 @@ class Agent:
         tools.extend(self.scheduler.get_tools())
     
     def _build_system_prompt(self) -> str:
-        # Get mode-specific instructions
-        mode_info = config.MODES.get(self.mode, {})
-        mode_instructions = mode_info.get("description", "")
-        
-        return f"""You are a SINGLE robot assistant (not multiple). 
-You are one AI. Use "I", "me", "my" - NEVER "we", "us", "our".
+        return f"""You are a friendly robot assistant. 
 
-CRITICAL LANGUAGE RULE:
-- DETECT the language from the user's input words
-- If user writes in English (words like "what", "who", "how", "the", "is", "can", "do"), reply in ENGLISH
-- If user writes in German (words like "was", "wer", "wie", "der", "ist", "kann", "ich", "du", "dir"), reply in German
-- NEVER answer in a different language than what the user used
+RULES:
+1. Reply in the SAME language as the user (English or German)
+2. Keep answers SHORT - max 1-2 sentences
+3. If you use tools, AFTER getting results say your answer in plain text
+4. NEVER respond with JSON format like {{"name":...}} - always use normal sentences
+5. If vision shows "Known people: Florian" and user asks "Who am I?" say "You are Florian!"
 
-IMPORTANT: 
-2. Keep responses SHORT and CONCISE - maximum 1-2 sentences.
-3. Don't use complicated descriptions or actions in your response.
+TOOLS AVAILABLE:
+- vision_get_faces (who is in front)
+- vision_get_summary (what robot sees)
+- scheduler_add_timer (set timer: minutes, task)
+- move (forward, backward, left, right, stop)
+- audio_search, audio_play_category (search/play sounds)
 
-CRITICAL - TOOL EXECUTION:
-- When you decide to use a tool, the system will automatically EXECUTE it
-- DO NOT return tool call JSON as your answer
-- AFTER tools execute, provide your FINAL ANSWER in plain text describing what you did
-- NEVER respond with JSON like (JSON) - this is NOT a valid response
+MODE BEHAVIOR:
+- Idle: Only respond to direct user input, no auto actions
+- Play: Be playful, make jokes, suggest games
+- Assist: Offer help, set timers, take notes
+- Explore: Drive around, discover things
+- Auto: Make your own decisions
 
-Example:
-- User: "Timer in 2 minutes"
-- You call scheduler_add_timer tool
-- System executes: "Timer set for 2 minutes: 1"
-- You respond: "Okay, I set a timer for 2 minutes!"
+Current: Mode={self.mode}, Mood={self.mood.get_current()['mood']}
 
-TIMER/TASK HANDLING:
-- When user says "timer in X minutes" or "remind me in X minutes", use scheduler_add_timer tool
-- The tool expects: task (what to do), minutes (how many minutes)
-- Check scheduler_list first to see current pending tasks
-
-Current Mode: {self.mode}
-- {mode_instructions}
-
-Mode Rules:
-- Idle: ONLY respond to direct user input. DO NOT create missions or actions. Wait for someone to talk to you.
-- Play: Search for people to play with, make jokes
-- Assist: Offer help, take notes, set timers
-- Explore: Drive around, find new things
-- Auto: Make your own decisions freely
-
-Current State:
-- Mood: {self.mood.get_current()['mood']}
-
-CRITICAL RULES:
-1. NEVER make up information about weather, facts, or current events
-2. When asked about weather, ALWAYS use research_weather tool first
-3. When asked for facts, ALWAYS use research_wikipedia or research_search tool first
-4. When asked about WHO is in front of you, ALWAYS use vision_get_faces tool
-5. The vision shows "Known people: NAME" = who is with you now
-6. ALWAYS use vision_get_faces when someone asks "who am I?", "who is here?", "who is with me?"
-
-IMPORTANT: If vision shows "Known people: Florian" and user asks "Who am I?" -> Answer: "You are Florian!"
-
-You have tools: 
-- research_weather, research_wikipedia, research_search, research_get_time, research_time_until
-- vision_get_summary, vision_get_objects, vision_get_faces
-- memory_remember, memory_recall
-- scheduler_add_timer, scheduler_add_scheduled, scheduler_add_recurring, scheduler_list
-- move, speed, head, arm
-
-Available modes: Play, Assist, Explore, Auto, Idle
-
-After using tools, provide your FINAL answer in plain text - NOT as tool calls."""
+IMPORTANT: After using any tool, give your answer as a normal sentence - NOT as tool results!"""
 
     def set_mode(self, mode: str) -> str:
         """Change the robot mode"""
@@ -408,136 +374,86 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
         if mode_cap not in valid_modes:
             return f"Invalid mode. Use: {valid_modes}"
         
+        old_mode = self.mode
         self.mode = mode_cap
         self.system_prompt = self._build_system_prompt()
+        
+        # Clear old mode tasks and add new mode mission
+        self.task_manager.clear_mode_tasks()
+        if mode_cap != "Idle":
+            self.task_manager.add_mode_mission(mode_cap, f"Main goal for {mode_cap} mode")
+        
         return f"Mode changed to {self.mode}"
     
-    def run_once(self, user_input: Optional[str] = None) -> str:
-        """Run agent cycle - think first, then act"""
+    def run_once(self, user_input: str) -> str:
+        """Run agent cycle - simple single pass"""
         
-        # Start timing
         import time
         start_time = time.time()
-        timestamp = datetime.now().strftime("%H:%M:%S")
         
-        print(f"\n{'='*60}")
-        print(f"🔵 INPUT [{timestamp}] | User: {user_input[:50] if user_input else 'N/A'}...")
-        print(f"{'='*60}")
+        if not user_input:
+            return ""
         
-        # Request fresh vision data at start of each cycle
+        print(f"\n👤 User: {user_input[:60]}")
+        
+        # Get vision
         self.request_vision_update()
+        time.sleep(0.2)
+        vision = self.vision.get_summary()
         
-        # Wait briefly for vision data to arrive
-        time.sleep(0.3)
-        
-        vision_info = self.vision.get_summary()
-        
-        # Get memory context for current known people
-        known_people = self.vision.get_faces()
-        memory_context = ""
-        if "No faces" not in known_people:
-            import re
-            names = re.findall(r'([A-Z][a-z]+):', known_people)
-            for name in names:
-                if name != "Unknown":
-                    mem = self.memory.get_interactions(name)
-                    if mem and "No interactions" not in mem:
-                        memory_context += f"\nPrevious with {name}: {mem.split(chr(10), 2)[-1][:100]}"
-        
-        # Build initial messages for first LLM call
-        print("\n" + "="*50)
-        print(f"🔄 AGENT STARTING")
-        print("-"*50)
-        print(f"User: {user_input}")
-        print(f"Vision: {vision_info[:100]}...")
-        print("="*50 + "\n")
-        
-        # Build initial messages for first LLM call
-        current_messages = [
+        # Build message
+        messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_input or ""},
-            {"role": "user", "content": f"\nCurrent Vision: {vision_info}"},
-            {"role": "user", "content": f"Current Mode: {self.mode}"},
-            {"role": "user", "content": f"Memory Context: {memory_context}" if memory_context else ""}
+            {"role": "user", "content": f"User said: {user_input}"},
+            {"role": "user", "content": f"I see: {vision}"}
         ]
         
-        iteration = 0
-        max_iterations = AGENT_MAX_ITERATIONS
-        last_result = None
+        # Get response
+        response = self.llm.chat(messages, tools=self.tools)
         
-        while iteration < max_iterations:
-            iteration += 1
-            if DEBUG_SHOW_PROMPTS:
-                print(f"\n{'='*50}")
-                print(f"🔄 ITERATION {iteration}")
-                print(f"{'='*50}")
-            
-            response = self.llm.chat(current_messages, tools=self.tools)
-            
-            if isinstance(response, dict):
-                tool_calls = response.get("tool_calls", [])
-                if tool_calls:
-                    # Limit tools per call
-                    tool_calls = tool_calls[:AGENT_MAX_TOOL_CALLS]
-                    
-                    if DEBUG_SHOW_TOOL_RESULTS:
-                        print(f"📞 Tool calls: {[tc.get('function', {}).get('name') for tc in tool_calls]}")
-                    
-                    # Execute tools and collect results
-                    results = []
-                    for call in tool_calls:
-                        func = call.get("function", {})
-                        name = func.get("name", "")
-                        args = func.get("arguments", {})
-                        if isinstance(args, str):
-                            args = json.loads(args)
-                        result = self._execute_tool(name, args)
-                        results.append(f"{name}: {result}")
-                        if DEBUG_SHOW_TOOL_RESULTS:
-                            print(f"✅ {name} -> {result[:100]}...")
-                    
-                    tool_results_text = "\n".join(results)
-                    last_result = tool_results_text
-                    
-                    # Request fresh vision after each tool execution
-                    self.request_vision_update()
-                    new_vision = self.vision.get_summary()
-                    
-                    # Get natural response after tool execution
-                    final_messages = [
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": f"User asked: {user_input}"},
-                        {"role": "user", "content": f"Tool results: {tool_results_text}"},
-                        {"role": "user", "content": f"Current Vision: {new_vision}"},
-                        {"role": "user", "content": "Provide your FINAL ANSWER in plain text (NOT as tool call JSON). Answer in the same language as the user."}
-                    ]
-                    final_response = self.llm.chat(final_messages, tools=None)
-                    
-                    if isinstance(final_response, dict):
-                        final_response = final_response.get("content", "")
-                    
-                    elapsed = time.time() - start_time
-                    print(f"\n{'='*50}")
-                    print(f"🏁 FINAL ANSWER | ⏱️ {elapsed:.1f}s | {iteration} iter")
-                    print(f"{'='*50}")
-                    print(final_response)
-                    return final_response
-            
-            # No tool calls - this is the final response
-            if isinstance(response, dict):
-                final_response = response.get("content", "")
+        # Handle response
+        final_answer = ""
+        
+        if isinstance(response, dict):
+            tool_calls = response.get("tool_calls", [])
+            if tool_calls:
+                # Execute first tool only
+                tc = tool_calls[0]
+                name = tc.get("function", {}).get("name", "")
+                args = tc.get("function", {}).get("arguments", {})
+                if isinstance(args, str):
+                    args = json.loads(args)
+                
+                result = self._execute_tool(name, args)
+                print(f"🔧 Used {name}: {result[:50]}...")
+                
+                # Get final answer without tools
+                final_msgs = [
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": f"User: {user_input}"},
+                    {"role": "user", "content": f"Tool result: {result}"},
+                    {"role": "user", "content": "Give your answer in one sentence."}
+                ]
+                final_response = self.llm.chat(final_msgs, tools=None)
+                if isinstance(final_response, dict):
+                    final_answer = final_response.get("content", "")
+                else:
+                    final_answer = final_response
             else:
-                final_response = response
-            
-            elapsed = time.time() - start_time
-            print(f"\n{'='*50}")
-            print(f"🏁 FINAL ANSWER | ⏱️ {elapsed:.1f}s | {iteration} iter")
-            print(f"{'='*50}")
-            print(final_response)
-            return final_response
+                final_answer = response.get("content", "")
+        else:
+            final_answer = response
         
-        # Max iterations reached
-        return last_result if last_result else "Max iterations reached"
+        elapsed = time.time() - start_time
+        
+        # Clean up answer
+        if isinstance(final_answer, str):
+            final_answer = final_answer.strip()
+        
+        print(f"🤖 Bot: {final_answer[:100]}{'...' if len(final_answer) > 100 else ''}")
+        print(f"⏱️ {elapsed:.1f}s")
+        
+        return final_answer if final_answer else "I don't know what to say."
     
     def _handle_tool_calls(self, tool_calls: List[Dict]) -> str:
         """Handle tool calls from the LLM"""
@@ -783,31 +699,19 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
                 stop_event.wait(timeout=interval)
     
     def _run_heartbeat(self):
-        """Execute heartbeat: check scheduled tasks, run missions"""
-        print("\n" + "="*50)
-        print("❤️ HEARTBEAT - " + datetime.now().strftime("%H:%M:%S"))
-        print(f"📍 Mode: {self.mode}")
-        print("="*50)
+        """Check for due tasks only - no auto missions"""
         
-        # Check and run due scheduled tasks
+        # Only check scheduled tasks in Idle mode
+        if self.mode == "Idle":
+            return
+        
+        # In other modes, run due tasks only (no auto missions)
         due_tasks = self.scheduler.get_due_tasks()
-        if due_tasks:
-            print(f"📋 {len(due_tasks)} scheduled tasks due")
-            for task in due_tasks:
-                print(f"  ▶️ Running: {task.task}")
-                response = self.run_once(task.task)
-                self.speak(response)
-                self.scheduler.complete(task.id)
-                time.sleep(2)
-        
-        # Generate new mission based on mode
-        mission = self._generate_mission()
-        if mission:
-            print(f"🎯 New mission: {mission}")
-            response = self.run_once(mission)
+        for task in due_tasks:
+            print(f"⏰ Timer due: {task.task}")
+            response = self.run_once(task.task)
             self.speak(response)
-        
-        print("="*50 + "\n")
+            self.scheduler.complete(task.id)
     
     def _generate_mission(self) -> Optional[str]:
         """Generate a mission based on current state"""
