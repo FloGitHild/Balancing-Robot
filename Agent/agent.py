@@ -38,18 +38,40 @@ from tools.audio_output import AudioOutput
 from tools.scheduler import Scheduler
 import config
 
+# Load config constants
+DEFAULT_MODE = config.DEFAULT_MODE
+LLM_MODEL = config.LLM_MODEL
+LLM_TIMEOUT = config.LLM_TIMEOUT
+AGENT_MAX_ITERATIONS = config.AGENT_MAX_ITERATIONS
+AGENT_MAX_TOOL_CALLS = config.AGENT_MAX_TOOL_CALLS
+AGENT_VISION_UPDATE_EACH_ITER = config.AGENT_VISION_UPDATE_EACH_ITER
+HEARTBEAT_MAP = {
+    "Idle": config.HEARTBEAT_IDLE,
+    "Play": config.HEARTBEAT_PLAY,
+    "Assist": config.HEARTBEAT_ASSIST,
+    "Explore": config.HEARTBEAT_EXPLORE,
+    "Auto": config.HEARTBEAT_AUTO,
+}
+TTS_MAX_CHARS = config.TTS_MAX_CHARS
+TTS_RATE = config.TTS_RATE
+TTS_PITCH = config.TTS_PITCH
+DEBUG_SHOW_PROMPTS = config.DEBUG_SHOW_PROMPTS
+DEBUG_SHOW_TOOL_RESULTS = config.DEBUG_SHOW_TOOL_RESULTS
+
 class Agent:
     def __init__(self, 
                  model: str = None,
                  mode: str = None,
-                 robot_url: str = "http://localhost:5000"):
+                 robot_url: str = None):
         print("🚀 Initializing Agent...")
         
         # Use config values if not specified
         if model is None:
-            model = config.LLM_CONFIG["default_model"]
+            model = LLM_MODEL
         if mode is None:
-            mode = config.DEFAULT_MODE
+            mode = DEFAULT_MODE
+        if robot_url is None:
+            robot_url = config.ROBOT_URL
         
         self.mode = mode
         self.robot_url = robot_url
@@ -214,21 +236,21 @@ class Agent:
             import edge_tts
             import asyncio
             
-            max_chars = 300  # Reduced for speed
+            max_chars = TTS_MAX_CHARS
             if len(text) > max_chars:
                 text = text[:max_chars] + "..."
             
             lang = self._detect_language(text)
             
             if lang == "de":
-                voice = "de-DE-KatjaNeural"
+                voice = config.TTS_VOICE_DE
             else:
-                voice = "en-US-JennyNeural"
+                voice = config.TTS_VOICE_EN
             
             mp3_file = '/tmp/tts_edge.mp3'
             
             async def generate():
-                communicate = edge_tts.Communicate(text, voice, rate="+30%", pitch="+50Hz")
+                communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE, pitch=TTS_PITCH)
                 await communicate.save(mp3_file)
             
             asyncio.run(generate())
@@ -412,21 +434,26 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
         ]
         
         iteration = 0
-        max_iterations = config.AGENT_CONFIG.get("max_iterations", 5)
+        max_iterations = AGENT_MAX_ITERATIONS
         last_result = None
         
         while iteration < max_iterations:
             iteration += 1
-            print(f"\n{'='*50}")
-            print(f"🔄 ITERATION {iteration}")
-            print(f"{'='*50}")
+            if DEBUG_SHOW_PROMPTS:
+                print(f"\n{'='*50}")
+                print(f"🔄 ITERATION {iteration}")
+                print(f"{'='*50}")
             
             response = self.llm.chat(current_messages, tools=self.tools)
             
             if isinstance(response, dict):
                 tool_calls = response.get("tool_calls", [])
                 if tool_calls:
-                    print(f"📞 Tool calls: {[tc.get('function', {}).get('name') for tc in tool_calls]}")
+                    # Limit tools per call
+                    tool_calls = tool_calls[:AGENT_MAX_TOOL_CALLS]
+                    
+                    if DEBUG_SHOW_TOOL_RESULTS:
+                        print(f"📞 Tool calls: {[tc.get('function', {}).get('name') for tc in tool_calls]}")
                     
                     # Execute tools and collect results
                     results = []
@@ -438,7 +465,8 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
                             args = json.loads(args)
                         result = self._execute_tool(name, args)
                         results.append(f"{name}: {result}")
-                        print(f"✅ {name} -> {result[:100]}...")
+                        if DEBUG_SHOW_TOOL_RESULTS:
+                            print(f"✅ {name} -> {result[:100]}...")
                     
                     tool_results_text = "\n".join(results)
                     last_result = tool_results_text
@@ -641,7 +669,7 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
         self.scheduler.register_callback("task_due", self._on_scheduled_task)
         
         # Get heartbeat interval from config based on current mode
-        heartbeat_interval = config.MODES.get(self.mode, {}).get("heartbeat_interval")
+        heartbeat_interval = HEARTBEAT_MAP.get(self.mode)
         
         if heartbeat_interval is None:
             print(f"\n🤖 Agent running in {self.mode} mode")
@@ -669,7 +697,7 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
                     new_mode = user_input[5:].strip()
                     print(f"🤖 {self.set_mode(new_mode)}")
                     # Update heartbeat for new mode
-                    heartbeat_interval = config.MODES.get(self.mode, {}).get("heartbeat_interval")
+                    heartbeat_interval = HEARTBEAT_MAP.get(self.mode)
                     if heartbeat_interval is None:
                         print("💤 No automatic heartbeat")
                     else:

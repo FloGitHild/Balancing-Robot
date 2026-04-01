@@ -4,6 +4,12 @@ import os
 import threading
 import time
 import socketio
+import importlib.util
+
+# Load config
+spec = importlib.util.spec_from_file_location("config", os.path.join(os.path.dirname(__file__), "config.py"))
+config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(config)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Lokal'))
 from detector import Detector
@@ -12,10 +18,10 @@ import face_recognition
 
 STREAM_URL = "http://localhost:5000/video_feed"
 SIM_URL = "http://localhost:5000"
-Face_Recog_Tolerance = 0.6
-Object_Confidence_Threshold = 0.6
-SHOW_WINDOW = False  # Set True to show detection window (slower)
-ANALYSIS_INTERVAL = 0.5  # Run detection every 0.5 seconds
+Face_Recog_Tolerance = config.VISION_FACE_TOLERANCE
+Object_Confidence_Threshold = config.VISION_OBJECT_CONFIDENCE
+SHOW_WINDOW = config.VISION_SHOW_WINDOW
+ANALYSIS_INTERVAL = config.VISION_DETECTION_INTERVAL
 
 detector = Detector()
 db = FaceDB()

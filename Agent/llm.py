@@ -2,10 +2,11 @@ import requests
 import json
 import os
 from typing import Optional, Dict, Any, List
+import config
 
 class OllamaLLM:
-    def __init__(self, model: str = "llama3.2:latest", base_url: str = "http://localhost:11434"):
-        self.model = model
+    def __init__(self, model: str = None, base_url: str = "http://localhost:11434"):
+        self.model = model if model else config.LLM_MODEL
         self.base_url = base_url
         self.session = requests.Session()
         self._check_connection()
@@ -31,11 +32,11 @@ class OllamaLLM:
             "messages": messages,
             "stream": False,
             "options": {
-                "num_ctx": 4096,  # Reduced for speed
-                "num_predict": 256,  # Limit response length
-                "temperature": 0.7,
-                "num_gpu": 0,  # Use CPU if no GPU
-                "threads": 4  # Limit threads for faster response
+                "num_ctx": config.LLM_CONTEXT_WINDOW,
+                "num_predict": config.LLM_MAX_TOKENS,
+                "temperature": config.LLM_TEMPERATURE,
+                "num_gpu": config.LLM_NUM_GPU,
+                "threads": config.LLM_THREADS
             }
         }
         if tools:
@@ -45,7 +46,7 @@ class OllamaLLM:
             response = self.session.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
-                timeout=180  # Increased timeout for slower models
+                timeout=config.LLM_TIMEOUT
             )
             if response.status_code == 200:
                 result = response.json()
