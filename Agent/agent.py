@@ -340,16 +340,32 @@ class Agent:
         return f"""You are a SINGLE robot assistant (not multiple). 
 You are one AI. Use "I", "me", "my" - NEVER "we", "us", "our".
 
+CRITICAL LANGUAGE RULE:
+- DETECT the language from the user's input words
+- If user writes in English (words like "what", "who", "how", "the", "is", "can", "do"), reply in ENGLISH
+- If user writes in German (words like "was", "wer", "wie", "der", "ist", "kann", "ich", "du", "dir"), reply in German
+- NEVER answer in a different language than what the user used
+
 IMPORTANT: 
-1. You can answer in ANY language! Match the language the user is speaking.
 2. Keep responses SHORT and CONCISE - maximum 1-2 sentences.
 3. Don't use complicated descriptions or actions in your response.
 
-CRITICAL - STOP AFTER 1-2 TOOL CALLS:
-- Use MAXIMUM 2 tools per request
-- If you have enough information to answer, STOP calling tools
-- Don't keep calling the same tool repeatedly
-- After getting tool results, provide your FINAL answer immediately
+CRITICAL - TOOL EXECUTION:
+- When you decide to use a tool, the system will automatically EXECUTE it
+- DO NOT return tool call JSON as your answer
+- AFTER tools execute, provide your FINAL ANSWER in plain text describing what you did
+- NEVER respond with JSON like (JSON) - this is NOT a valid response
+
+Example:
+- User: "Timer in 2 minutes"
+- You call scheduler_add_timer tool
+- System executes: "Timer set for 2 minutes: 1"
+- You respond: "Okay, I set a timer for 2 minutes!"
+
+TIMER/TASK HANDLING:
+- When user says "timer in X minutes" or "remind me in X minutes", use scheduler_add_timer tool
+- The tool expects: task (what to do), minutes (how many minutes)
+- Check scheduler_list first to see current pending tasks
 
 Current Mode: {self.mode}
 - {mode_instructions}
@@ -370,7 +386,7 @@ CRITICAL RULES:
 3. When asked for facts, ALWAYS use research_wikipedia or research_search tool first
 4. When asked about WHO is in front of you, ALWAYS use vision_get_faces tool
 5. The vision shows "Known people: NAME" = who is with you now
-6. ALWAYS use vision_get_faces when someone asks "who am i?", "who is here?", "who is with me?"
+6. ALWAYS use vision_get_faces when someone asks "who am I?", "who is here?", "who is with me?"
 
 IMPORTANT: If vision shows "Known people: Florian" and user asks "Who am I?" -> Answer: "You are Florian!"
 
@@ -399,8 +415,20 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
     def run_once(self, user_input: Optional[str] = None) -> str:
         """Run agent cycle - think first, then act"""
         
+        # Start timing
+        import time
+        start_time = time.time()
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        print(f"\n{'='*60}")
+        print(f"🔵 INPUT [{timestamp}] | User: {user_input[:50] if user_input else 'N/A'}...")
+        print(f"{'='*60}")
+        
         # Request fresh vision data at start of each cycle
         self.request_vision_update()
+        
+        # Wait briefly for vision data to arrive
+        time.sleep(0.3)
         
         vision_info = self.vision.get_summary()
         
@@ -475,15 +503,25 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
                     self.request_vision_update()
                     new_vision = self.vision.get_summary()
                     
-                    # Continue with tool results - add to messages and loop again
-                    current_messages = [
+                    # Get natural response after tool execution
+                    final_messages = [
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": f"User asked: {user_input}"},
-                        {"role": "user", "content": f"Previous tool results: {tool_results_text}"},
+                        {"role": "user", "content": f"Tool results: {tool_results_text}"},
                         {"role": "user", "content": f"Current Vision: {new_vision}"},
-                        {"role": "user", "content": "Continue if needed, or provide final answer."}
+                        {"role": "user", "content": "Provide your FINAL ANSWER in plain text (NOT as tool call JSON). Answer in the same language as the user."}
                     ]
-                    continue
+                    final_response = self.llm.chat(final_messages, tools=None)
+                    
+                    if isinstance(final_response, dict):
+                        final_response = final_response.get("content", "")
+                    
+                    elapsed = time.time() - start_time
+                    print(f"\n{'='*50}")
+                    print(f"🏁 FINAL ANSWER | ⏱️ {elapsed:.1f}s | {iteration} iter")
+                    print(f"{'='*50}")
+                    print(final_response)
+                    return final_response
             
             # No tool calls - this is the final response
             if isinstance(response, dict):
@@ -491,8 +529,9 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
             else:
                 final_response = response
             
+            elapsed = time.time() - start_time
             print(f"\n{'='*50}")
-            print(f"🏁 FINAL ANSWER (after {iteration} iteration(s))")
+            print(f"🏁 FINAL ANSWER | ⏱️ {elapsed:.1f}s | {iteration} iter")
             print(f"{'='*50}")
             print(final_response)
             return final_response
@@ -662,6 +701,9 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
     
     def run(self):
         """Run the agent with heartbeat loop"""
+        import time
+        agent_start_time = time.time()
+        
         self.running = True
         self.audio_input.start()
         self.scheduler.start()
@@ -669,16 +711,17 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
         self.scheduler.register_callback("task_due", self._on_scheduled_task)
         
         # Get heartbeat interval from config based on current mode
-        heartbeat_interval = HEARTBEAT_MAP.get(self.mode)
+        heartbeat_interval = HEARTBEAT_MAP.get(self.mode, 30)
         
         if heartbeat_interval is None:
-            print(f"\n🤖 Agent running in {self.mode} mode")
+            print(f"\n🤖 Agent running in {self.mode} mode | Started: {datetime.now().strftime('%H:%M:%S')}")
             print("💤 No automatic heartbeat - waiting for user input")
         else:
-            # Add recurring task for heartbeat
+            # Add recurring task for heartbeat (minimum 1 minute)
+            interval_minutes = max(1, heartbeat_interval // 60)
             heartbeat_task = f"Heartbeat for {self.mode}"
-            self.scheduler.add_recurring(heartbeat_task, heartbeat_interval // 60 if heartbeat_interval >= 60 else 1)
-            print(f"\n🤖 Agent running in {self.mode} mode")
+            self.scheduler.add_recurring(heartbeat_task, interval_minutes)
+            print(f"\n🤖 Agent running in {self.mode} mode | Started: {datetime.now().strftime('%H:%M:%S')}")
             print(f"❤️ Heartbeat: {heartbeat_interval}s | Type 'quit' to exit, 'mode <name>' to change mode\n")
         
         import threading
@@ -718,15 +761,26 @@ After using tools, provide your FINAL answer in plain text - NOT as tool calls."
         self.cleanup()
     
     def _heartbeat_loop(self, stop_event):
-        """Heartbeat loop - runs every 2 minutes"""
+        """Heartbeat loop - runs based on current mode's heartbeat interval"""
         import time
         while not stop_event.is_set():
+            # Check current mode's heartbeat - stop if None (Idle)
+            interval = HEARTBEAT_MAP.get(self.mode)
+            if interval is None:
+                # Idle mode - no heartbeat, just wait
+                stop_event.wait(timeout=5)
+                continue
+            
             try:
                 self._run_heartbeat()
             except Exception as e:
                 print(f"Heartbeat error: {e}")
             
-            stop_event.wait(timeout=120)
+            if interval == 0:
+                # Continuous mode - no delay between heartbeats
+                continue
+            else:
+                stop_event.wait(timeout=interval)
     
     def _run_heartbeat(self):
         """Execute heartbeat: check scheduled tasks, run missions"""

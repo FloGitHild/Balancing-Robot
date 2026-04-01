@@ -379,6 +379,12 @@ def vision_update(data):
     if faces or objs:
         print(f"📹 Vision relay: {len(faces)} faces, {len(objs)} objects")
 
+@socketio.on('request_vision')
+def request_vision():
+    # Forward request_vision to all clients (including vision_for_agent)
+    socketio.emit('request_vision')
+    print("📹 Vision request forwarded")
+
 
 # -----------------------------
 # BROADCAST LOOP (Auto-Update + Terminal Debug)
